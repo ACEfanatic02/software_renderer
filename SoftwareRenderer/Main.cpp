@@ -153,6 +153,14 @@ mat4x4 RotationMatrix(float theta, RotationAxis axis)
 		rv.c2 = c;
 		rv.d3 = 1.0f;
 		break;
+	case RA_Z:
+		rv.a0 = c;
+		rv.a1 = -s;
+		rv.b0 = s;
+		rv.b1 = c;
+		rv.c2 = 1.0f;
+		rv.d3 = 1.0f;
+		break;
 	default:
 		assert(0);
 	}
@@ -173,7 +181,7 @@ void TestMatrixMultiply()
 	float t = (gScreenHeight / 2.0f);
 	float b = -(gScreenHeight / 2.0f);
 	float n = 1.0f;
-	float f = 1000.0f;
+	float f = 100.0f;
 	mat4x4 test = FrustumMatrix(r, l, t, b, n, f);
 	mat4x4 ident = { 0.0f };
 
@@ -182,7 +190,7 @@ void TestMatrixMultiply()
 	ident.c2 = 1.0f;
 	ident.d3 = 1.0f;
 
-	vec4 testVec = { -0.5f, -0.5f, 0.25f, 1.0f };
+	vec4 testVec = { -100.0f, -100.0f, 100.0f, 1.0f };
 
 	OutputDebugStringW(L"Original:\n");
 
@@ -483,29 +491,74 @@ void RenderTest(win32_backbuffer * backbuffer)
 	mat4x4 frustumMatrix = FrustumMatrix(r, l, t, b, n, f);
 
 	static float angle = 0.0f;
-	mat4x4 rotationMatrix = RotationMatrix(angle, RA_Y) * RotationMatrix(angle, RA_X);
+	mat4x4 rotationMatrix = RotationMatrix(angle, RA_Y) * RotationMatrix(angle, RA_X) * RotationMatrix(angle, RA_Z);
 
 	angle += 0.1f;
 
-	vec4 verts[3] = {
+	static const int vertexCount = 36;
+
+	vec4 verts[vertexCount] = {
 		{ -100.0f, -100.0f, -100.0f, 1.0f },
 		{ -100.0f, -100.0f,  100.0f, 1.0f },
 		{ -100.0f,  100.0f,  100.0f, 1.0f },
-/*		{  100.0f, -105.75f, -0.75f, 1.0f },
-		{ -100.0f, -100.75f, -0.75f, 1.0f },
-		{  100.0f, -100.75f, 10000.0f, 1.0f },*/
+
+		{  100.0f,  100.0f, -100.0f, 1.0f },
+		{ -100.0f, -100.0f, -100.0f, 1.0f },
+		{ -100.0f,  100.0f, -100.0f, 1.0f },
+
+		{  100.0f, -100.0f,  100.0f, 1.0f },
+		{ -100.0f, -100.0f, -100.0f, 1.0f },
+		{  100.0f, -100.0f, -100.0f, 1.0f },
+
+		{  100.0f,  100.0f, -100.0f, 1.0f },
+		{  100.0f, -100.0f, -100.0f, 1.0f },
+		{ -100.0f, -100.0f, -100.0f, 1.0f },
+
+		{ -100.0f, -100.0f, -100.0f, 1.0f },
+		{ -100.0f,  100.0f,  100.0f, 1.0f },
+		{ -100.0f,  100.0f, -100.0f, 1.0f },
+
+		{  100.0f, -100.0f,  100.0f, 1.0f },
+		{ -100.0f, -100.0f,  100.0f, 1.0f },
+		{ -100.0f, -100.0f, -100.0f, 1.0f },
+
+		{ -100.0f,  100.0f,  100.0f, 1.0f },
+		{ -100.0f, -100.0f,  100.0f, 1.0f },
+		{  100.0f, -100.0f,  100.0f, 1.0f },
+
+		{  100.0f,  100.0f,  100.0f, 1.0f },
+		{  100.0f, -100.0f, -100.0f, 1.0f },
+		{  100.0f,  100.0f, -100.0f, 1.0f },
+		
+		{  100.0f, -100.0f, -100.0f, 1.0f },
+		{  100.0f,  100.0f,  100.0f, 1.0f },
+		{  100.0f, -100.0f,  100.0f, 1.0f },
+		
+		{  100.0f,  100.0f,  100.0f, 1.0f },
+		{  100.0f,  100.0f, -100.0f, 1.0f },
+		{ -100.0f,  100.0f, -100.0f, 1.0f },
+
+		{  100.0f,  100.0f,  100.0f, 1.0f },
+		{ -100.0f,  100.0f, -100.0f, 1.0f },
+		{ -100.0f,  100.0f,  100.0f, 1.0f },
+
+		{  100.0f,  100.0f,  100.0f, 1.0f },
+		{ -100.0f,  100.0f,  100.0f, 1.0f },
+		{  100.0f, -100.0f,  100.0f, 1.0f },
 	};
 
-	verts[0] = rotationMatrix * verts[0];
-	verts[1] = rotationMatrix * verts[1];
-	verts[2] = rotationMatrix * verts[2];
+	vec4 transformedVerts[vertexCount];
+	for (int i = 0; i < vertexCount; i += 3)
+	{
+		verts[i]     = rotationMatrix * verts[i];
+		verts[i + 1] = rotationMatrix * verts[i + 1];
+		verts[i + 2] = rotationMatrix * verts[i + 2];
+		transformedVerts[i]     = frustumMatrix * verts[i];
+		transformedVerts[i + 1] = frustumMatrix * verts[i + 1];
+		transformedVerts[i + 2] = frustumMatrix * verts[i + 2];
 
-	vec4 transformedVerts[3];
-	transformedVerts[0] = frustumMatrix * verts[0];
-	transformedVerts[1] = frustumMatrix * verts[1];
-	transformedVerts[2] = frustumMatrix * verts[2];
-
-	Rasterize(backbuffer, transformedVerts[0], transformedVerts[1], transformedVerts[2]);
+		Rasterize(backbuffer, transformedVerts[i], transformedVerts[i + 1], transformedVerts[i + 2]);
+	}
 }
 
 
@@ -598,7 +651,7 @@ WinMain(HINSTANCE hInstance,
 		{
 			wchar_t buffer[1024] = {0};
 			swprintf(buffer, _countof(buffer), L"frame time: %fms\n", frameTime);
-//			OutputDebugStringW(buffer);
+			OutputDebugStringW(buffer);
 		}
 
 //		u64 msToSleep = frameTargetMS - (elapsedSinceFrameStart / perfTicksPerMS);
