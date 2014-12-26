@@ -6,6 +6,10 @@
 #include <cstdint>
 #include <cstdio>
 
+#define min3(a, b, c) min(a, min(b, c))
+#define max3(a, b, c) max(a, max(b, c))
+#define clamp(n, a, b) min(max(n, a), b)
+
 typedef unsigned int uint;
 typedef uint8_t u8;
 typedef uint32_t u32;
@@ -103,6 +107,15 @@ mat4x4 FrustumMatrix(float r, float l, float t, float b, float n, float f)
 	rv.c3 = -(2 * n * f) / depth;
 	rv.d2 = -1;
 
+	return rv;
+}
+
+mat4x4 TranslationMatrix(float dx, float dy, float dz)
+{
+	mat4x4 rv = { 1.0f, 0.0f, 0.0f, dx,
+				  0.0f, 1.0f, 0.0f, dy,
+				  0.0f, 0.0f, 1.0f, dz,
+				  0.0f, 0.0f, 0.0f, 1.0f };
 	return rv;
 }
 
@@ -206,7 +219,8 @@ void TestMatrixMultiply()
 
 	OutputDebugStringW(L"\nTransformed vector:\n");
 
-	DEBUGPrintVec4(test * testVec);
+	vec4 transformed = test * testVec;
+	DEBUGPrintVec4(transformed);
 
 	OutputDebugStringW(L"\n90degree rotation matrix around Y:\n");
 
@@ -427,7 +441,7 @@ RasterizeTriangle(win32_backbuffer * backbuffer,
 					uint a = (c0.a*w0 + c1.a*w1 + c2.a*w2) / totalWeight;
 				}
 
-				SetPixel(backbuffer, p.x, p.y, RGBA32(0xff, 0xff, 0xff, 0xff));//RGBA32(r, g, b, a));
+				SetPixel(backbuffer, p.x, p.y, RGBA32(c0.r, c0.g, c0.b, c0.a));
 			}
 
 			w0 += a12;
@@ -464,103 +478,203 @@ RotateVec(vec2i * v, float angle)
 }
 
 
-static void
-Rasterize(win32_backbuffer * backbuffer, const vec4& v0, const vec4& v1, const vec4& v2)
+/*static void
+Rasterize(win32_backbuffer * backbuffer, const vec4& v0, const vec4& v1, const vec4& v2, Color color)
 {
-	vec2i a = { (int)((v0.x + 1.0f) * (gScreenWidth / 2.0f)), (int)((v0.y + 1.0f) * (gScreenHeight / 2.0f)) };
-	vec2i b = { (int)((v1.x + 1.0f) * (gScreenWidth / 2.0f)), (int)((v1.y + 1.0f) * (gScreenHeight / 2.0f)) };
-	vec2i c = { (int)((v2.x + 1.0f) * (gScreenWidth / 2.0f)), (int)((v2.y + 1.0f) * (gScreenHeight / 2.0f)) };
+	vec2i a = { (int)((v0.x / v0.w + 1.0f) * (gScreenWidth / 2.0f)), (int)((v0.y / v0.w + 1.0f) * (gScreenHeight / 2.0f)) };
+	vec2i b = { (int)((v1.x / v1.w + 1.0f) * (gScreenWidth / 2.0f)), (int)((v1.y / v0.w + 1.0f) * (gScreenHeight / 2.0f)) };
+	vec2i c = { (int)((v2.x / v2.w + 1.0f) * (gScreenWidth / 2.0f)), (int)((v2.y / v0.w + 1.0f) * (gScreenHeight / 2.0f)) };
 
 	vertex verts[3] = {
-		{ a, Color(0xff, 0xff, 0xff, 0xff) },
-		{ b, Color(0xff, 0xff, 0xff, 0xff) },
-		{ c, Color(0xff, 0xff, 0xff, 0xff) },
+		{ a, color },
+		{ b, color },
+		{ c, color },
 	};
 
 	RasterizeTriangle(backbuffer, verts[0], verts[1], verts[2]);
+}*/
+
+// Compute (twice) the area of the triangle abc.
+static float
+Orient2D(const vec4& a, const vec4& b, const vec4& c)
+{
+	return (b.x - a.x)*(c.y - a.y) - (b.y - a.y)*(c.x - a.x);
 }
+
+static void
+Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color color)
+{
+	float screenHalfWidth = gScreenWidth / 2.0f;
+	float screenHalfHeight = gScreenHeight / 2.0f;
+
+	v0.x = ((v0.x / v0.w) + 1.0f) * screenHalfWidth;
+	v0.y = ((v0.y / v0.w) + 1.0f) * screenHalfHeight;
+	v1.x = ((v1.x / v1.w) + 1.0f) * screenHalfWidth;
+	v1.y = ((v1.y / v1.w) + 1.0f) * screenHalfHeight;
+	v2.x = ((v2.x / v2.w) + 1.0f) * screenHalfWidth;
+	v2.y = ((v2.y / v2.w) + 1.0f) * screenHalfHeight;
+
+	float minX = min3(v0.x, v1.x, v2.x);
+	float minY = min3(v0.y, v1.y, v2.y);
+	float maxX = max3(v0.x, v1.x, v2.x);
+	float maxY = max3(v0.y, v1.y, v2.y);
+
+	minX = min(minX, 0);
+	minY = min(minY, 0);
+	maxX = max(maxX, gScreenWidth - 1.0f);
+	maxY = max(maxY, gScreenHeight - 1.0f);
+
+	float a01 = v0.y - v1.y;
+	float b01 = v1.x - v0.x;
+	float a12 = v1.y - v2.y;
+	float b12 = v2.x - v1.x;
+	float a20 = v2.y - v0.y;
+	float b20 = v0.x - v2.x;
+
+	vec4 p = { minX, minY, 0.0f, 1.0f };
+	
+	float w0_row = Orient2D(v1, v2, p);
+	float w1_row = Orient2D(v2, v0, p);
+	float w2_row = Orient2D(v0, v1, p);
+
+	for (p.y = minY; p.y <= maxY; p.y += 1.0f)
+	{
+		float w0 = w0_row;
+		float w1 = w1_row;
+		float w2 = w2_row;
+
+		for (p.x = minX; p.x <= maxX; p.x += 1.0f)
+		{
+			if (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) 
+			{
+				SetPixel(backbuffer, (int)p.x, (int)p.y, RGBA32(color.r, color.g, color.b, color.a));
+			}
+			w0 += a12;
+			w1 += a20;
+			w2 += a01;
+		}
+
+		w0_row += b12;
+		w1_row += b20;
+		w2_row += b01;
+	}
+}
+
+static Color faceColors[6] = {
+	Color(0xff, 0xff, 0xff, 0xff),
+	Color(0xff,    0,    0, 0xff),
+	Color(   0, 0xff,    0, 0xff),
+	Color(   0,    0, 0xff, 0xff),
+	Color(0xff, 0xff,    0, 0xff),
+	Color(0xff,    0, 0xff, 0xff),
+};
 
 void RenderTest(win32_backbuffer * backbuffer)
 {
 	float r = (gScreenWidth / 2.0f);
 	float l = -(gScreenWidth / 2.0f);
-	float t = (gScreenHeight / 2.0f);
-	float b = -(gScreenHeight / 2.0f);
-	float n = 1.0f;
-	float f = 100.0f;
+	float t = -(gScreenHeight / 2.0f);
+	float b = (gScreenHeight / 2.0f);
+	float n = -1000.0f;
+	float f = 1000.0f;
 	mat4x4 frustumMatrix = FrustumMatrix(r, l, t, b, n, f);
 
 	static float angle = 0.0f;
-	mat4x4 rotationMatrix = RotationMatrix(angle, RA_Y) * RotationMatrix(angle, RA_X) * RotationMatrix(angle, RA_Z);
+	mat4x4 rotationMatrix = TranslationMatrix(0.0f, 0.0f, 15.0f) * RotationMatrix(angle, RA_Y) * RotationMatrix(angle, RA_X) * RotationMatrix(angle, RA_Z);
 
 	angle += 0.1f;
 
 	static const int vertexCount = 36;
 
 	vec4 verts[vertexCount] = {
-		{ -100.0f, -100.0f, -100.0f, 1.0f },
-		{ -100.0f, -100.0f,  100.0f, 1.0f },
-		{ -100.0f,  100.0f,  100.0f, 1.0f },
+		{ -1.0f, -1.0f, -1.0f, 1.0f },
+		{ -1.0f, -1.0f,  1.0f, 1.0f },
+		{ -1.0f,  1.0f,  1.0f, 1.0f },
 
-		{  100.0f,  100.0f, -100.0f, 1.0f },
-		{ -100.0f, -100.0f, -100.0f, 1.0f },
-		{ -100.0f,  100.0f, -100.0f, 1.0f },
+		{  1.0f,  1.0f, -1.0f, 1.0f },
+		{ -1.0f, -1.0f, -1.0f, 1.0f },
+		{ -1.0f,  1.0f, -1.0f, 1.0f },
 
-		{  100.0f, -100.0f,  100.0f, 1.0f },
-		{ -100.0f, -100.0f, -100.0f, 1.0f },
-		{  100.0f, -100.0f, -100.0f, 1.0f },
+		{  1.0f, -1.0f,  1.0f, 1.0f },
+		{ -1.0f, -1.0f, -1.0f, 1.0f },
+		{  1.0f, -1.0f, -1.0f, 1.0f },
 
-		{  100.0f,  100.0f, -100.0f, 1.0f },
-		{  100.0f, -100.0f, -100.0f, 1.0f },
-		{ -100.0f, -100.0f, -100.0f, 1.0f },
+		{  1.0f,  1.0f, -1.0f, 1.0f },
+		{  1.0f, -1.0f, -1.0f, 1.0f },
+		{ -1.0f, -1.0f, -1.0f, 1.0f },
 
-		{ -100.0f, -100.0f, -100.0f, 1.0f },
-		{ -100.0f,  100.0f,  100.0f, 1.0f },
-		{ -100.0f,  100.0f, -100.0f, 1.0f },
+		{ -1.0f, -1.0f, -1.0f, 1.0f },
+		{ -1.0f,  1.0f,  1.0f, 1.0f },
+		{ -1.0f,  1.0f, -1.0f, 1.0f },
 
-		{  100.0f, -100.0f,  100.0f, 1.0f },
-		{ -100.0f, -100.0f,  100.0f, 1.0f },
-		{ -100.0f, -100.0f, -100.0f, 1.0f },
+		{  1.0f, -1.0f,  1.0f, 1.0f },
+		{ -1.0f, -1.0f,  1.0f, 1.0f },
+		{ -1.0f, -1.0f, -1.0f, 1.0f },
 
-		{ -100.0f,  100.0f,  100.0f, 1.0f },
-		{ -100.0f, -100.0f,  100.0f, 1.0f },
-		{  100.0f, -100.0f,  100.0f, 1.0f },
+		{ -1.0f,  1.0f,  1.0f, 1.0f },
+		{ -1.0f, -1.0f,  1.0f, 1.0f },
+		{  1.0f, -1.0f,  1.0f, 1.0f },
 
-		{  100.0f,  100.0f,  100.0f, 1.0f },
-		{  100.0f, -100.0f, -100.0f, 1.0f },
-		{  100.0f,  100.0f, -100.0f, 1.0f },
+		{  1.0f,  1.0f,  1.0f, 1.0f },
+		{  1.0f, -1.0f, -1.0f, 1.0f },
+		{  1.0f,  1.0f, -1.0f, 1.0f },
 		
-		{  100.0f, -100.0f, -100.0f, 1.0f },
-		{  100.0f,  100.0f,  100.0f, 1.0f },
-		{  100.0f, -100.0f,  100.0f, 1.0f },
+		{  1.0f, -1.0f, -1.0f, 1.0f },
+		{  1.0f,  1.0f,  1.0f, 1.0f },
+		{  1.0f, -1.0f,  1.0f, 1.0f },
 		
-		{  100.0f,  100.0f,  100.0f, 1.0f },
-		{  100.0f,  100.0f, -100.0f, 1.0f },
-		{ -100.0f,  100.0f, -100.0f, 1.0f },
+		{  1.0f,  1.0f,  1.0f, 1.0f },
+		{  1.0f,  1.0f, -1.0f, 1.0f },
+		{ -1.0f,  1.0f, -1.0f, 1.0f },
 
-		{  100.0f,  100.0f,  100.0f, 1.0f },
-		{ -100.0f,  100.0f, -100.0f, 1.0f },
-		{ -100.0f,  100.0f,  100.0f, 1.0f },
+		{  1.0f,  1.0f,  1.0f, 1.0f },
+		{ -1.0f,  1.0f, -1.0f, 1.0f },
+		{ -1.0f,  1.0f,  1.0f, 1.0f },
 
-		{  100.0f,  100.0f,  100.0f, 1.0f },
-		{ -100.0f,  100.0f,  100.0f, 1.0f },
-		{  100.0f, -100.0f,  100.0f, 1.0f },
+		{  1.0f,  1.0f,  1.0f, 1.0f },
+		{ -1.0f,  1.0f,  1.0f, 1.0f },
+		{  1.0f, -1.0f,  1.0f, 1.0f },
 	};
 
 	vec4 transformedVerts[vertexCount];
 	for (int i = 0; i < vertexCount; i += 3)
 	{
-		verts[i]     = rotationMatrix * verts[i];
-		verts[i + 1] = rotationMatrix * verts[i + 1];
-		verts[i + 2] = rotationMatrix * verts[i + 2];
+		transformedVerts[i]     = rotationMatrix * verts[i];
+		transformedVerts[i + 1] = rotationMatrix * verts[i + 1];
+		transformedVerts[i + 2] = rotationMatrix * verts[i + 2];
+		transformedVerts[i]     = frustumMatrix * transformedVerts[i];
+		transformedVerts[i + 1] = frustumMatrix * transformedVerts[i + 1];
+		transformedVerts[i + 2] = frustumMatrix * transformedVerts[i + 2];
+
+		Rasterize(backbuffer, transformedVerts[i], transformedVerts[i + 1], transformedVerts[i + 2], faceColors[(i / 3) % 6]);
+	}
+	/*
+	mat4x4 translMatrix = { 0.0f };
+	translMatrix.a0 = 1.0f;
+	translMatrix.b1 = 1.0f;
+	translMatrix.c2 = 1.0f;
+	
+	static float dist = 1.0f;
+
+	translMatrix.a3 = 0.0f;
+	translMatrix.b3 = 0.0f;
+	translMatrix.c3 = -1.0f * dist;
+	translMatrix.d3 = 1.0f;
+
+	dist += 10.0f;
+
+	for (int i = 0; i < vertexCount; i += 3)
+	{
+		verts[i]	 = translMatrix * verts[i];
+		verts[i + 1] = translMatrix * verts[i + 1];
+		verts[i + 2] = translMatrix * verts[i + 2];
 		transformedVerts[i]     = frustumMatrix * verts[i];
 		transformedVerts[i + 1] = frustumMatrix * verts[i + 1];
 		transformedVerts[i + 2] = frustumMatrix * verts[i + 2];
 
-		Rasterize(backbuffer, transformedVerts[i], transformedVerts[i + 1], transformedVerts[i + 2]);
-	}
+		Rasterize(backbuffer, transformedVerts[i], transformedVerts[i + 1], transformedVerts[i + 2], faceColors[(i / 3) % 6]);
+	}*/
 }
-
 
 static u64
 Win32TimerFrequency()
