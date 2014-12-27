@@ -541,7 +541,7 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color color)
 	maxX = min(maxX, gScreenWidth - 1.0f);
 	maxY = min(maxY, gScreenHeight - 1.0f);
 
-	float stepSize = 3.0f; // Pixels to step in each direction.
+	float stepSize = 0.5f; // Pixels to step in each direction.
 
 	float a01 = (v0.y - v1.y) * stepSize;
 	float b01 = (v1.x - v0.x) * stepSize;
@@ -732,11 +732,20 @@ WinMain(HINSTANCE hInstance,
 
 	RegisterClassEx(&windowClass);
 
+	RECT clientSize;
+	clientSize.top = 0;
+	clientSize.left = 0;
+	clientSize.right = gScreenWidth;
+	clientSize.bottom = gScreenHeight;
+
+	AdjustWindowRect(&clientSize, WS_OVERLAPPEDWINDOW, FALSE);
+
 	HWND window = CreateWindowEx(0, windowClass.lpszClassName, 
 								 TEXT("Software Renderer"), 
 								 WS_OVERLAPPEDWINDOW, 
 								 CW_USEDEFAULT, CW_USEDEFAULT, 
-								 gScreenWidth, gScreenHeight, 
+								 clientSize.right - clientSize.left, 
+								 clientSize.bottom - clientSize.top, 
 								 NULL, NULL, hInstance, NULL);
 	assert(window);
 
