@@ -50,10 +50,31 @@ struct quaternion
 	float z;
 };
 
+vec4 operator/(vec4 v, float f)
+{
+	vec4 rv = {
+		v.x / f,
+		v.y / f,
+		v.z / f, 
+		v.w / f,
+	};
+
+	return rv;
+}
+
+vec4 normalized(vec4 v)
+{
+	float magnitude = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
+	return v / magnitude; 
+}
+
 quaternion RotationAroundAxis(float theta, vec4 axis)
 {
 	float halfTheta = theta / 2.0f;
 	float sinHalfTheta = sin(halfTheta);
+
+	axis = normalized(axis);
+
 	quaternion q = {
 		cos(halfTheta),
 		axis.x * sinHalfTheta,
@@ -100,8 +121,10 @@ quaternion operator*(const quaternion& q1, const quaternion& q2)
 	return rv;
 }
 
+/*
 vec4 operator*(const quaternion& q, const vec4& v)
 {
+	assert(0 && "Incomplete");
 	// TODO: this math is wrong.  Simply upconverting the
 	// vector to a quaternion is not the right approach.
 	// Most engines appear to just convert to a rotation matrix
@@ -122,7 +145,7 @@ vec4 operator*(const quaternion& q, const vec4& v)
 	vec4 rv = { result.x, result.y, result.z, v.w };
 
 	return rv;
-}
+}*/
 
 void DEBUGPrintMat4x4(const mat4x4& m)
 {
@@ -325,15 +348,15 @@ void TestMatrixMultiply()
 
 	OutputDebugStringW(L"\n90degree rotation matrix around Y:\n");
 
-	mat4x4 rotMat = RotationMatrix(M_PI_2, RA_Y);
+	mat4x4 rotMat = RotationMatrix((float)M_PI_2, RA_Y);
 	DEBUGPrintMat4x4(rotMat);
 	DEBUGPrintVec4(rotMat * testVec);
 
 	OutputDebugStringW(L"\n90 degree quaternion rotation around Y:\n");
 
 	vec4 yAxis = { 0.0f, 1.0f, 0.0f, 0.0f };
-	quaternion quat = RotationAroundAxis(M_PI_2, yAxis);
-	DEBUGPrintVec4(quat * testVec);
+	quaternion quat = RotationAroundAxis((float)M_PI_2, yAxis);
+//	DEBUGPrintVec4(quat * testVec);
 }
 
 LRESULT CALLBACK
@@ -360,6 +383,7 @@ struct win32_backbuffer
 	BITMAPINFO bmpInfo;
 	void * bmpMemory;
 	HBITMAP bmpHandle;
+	float * depthBuffer;
 };
 
 static void 
@@ -456,18 +480,6 @@ RenderTestGradient(win32_backbuffer * backbuffer)
 // https://fgiesen.wordpress.com/2013/02/08/triangle-rasterization-in-practice/
 //
 
-struct vec2i
-{
-	int x;
-	int y;
-};
-
-struct vertex
-{
-	vec2i pos;
-	Color color;
-};
-
 static void
 SetPixel(win32_backbuffer * backbuffer, int x, int y, u32 color)
 {
@@ -480,125 +492,6 @@ SetPixel(win32_backbuffer * backbuffer, int x, int y, u32 color)
 	u32 * pixels = (u32 *)backbuffer->bmpMemory;
 	pixels[y * width + x] = color;
 }
-
-// Compute (twice) the area of the triangle abc.
-static int
-Orient2D(const vec2i& a, const vec2i& b, const vec2i& c)
-{
-	return (b.x - a.x)*(c.y - a.y) - (b.y - a.y)*(c.x - a.x);
-}
-
-static void
-RasterizeTriangle(win32_backbuffer * backbuffer,
-				  const vertex& v0, const vertex& v1, const vertex& v2)
-{
-	int minX = min(v0.pos.x, min(v1.pos.x, v2.pos.x));
-	int minY = min(v0.pos.y, min(v1.pos.y, v2.pos.y));
-	int maxX = max(v0.pos.x, max(v1.pos.x, v2.pos.x));
-	int maxY = max(v0.pos.y, max(v1.pos.y, v2.pos.y));
-
-	minX = max(0, minX);
-	minY = max(0, minY);
-	maxX = min(maxX, gScreenWidth - 1);
-	maxY = min(maxY, gScreenHeight - 1);
-
-	// Per-pixel step values for the barycentric weights.
-	int a01 = v0.pos.y - v1.pos.y;
-	int b01 = v1.pos.x - v0.pos.x;
-	int a12 = v1.pos.y - v2.pos.y;
-	int b12 = v2.pos.x - v1.pos.x;
-	int a20 = v2.pos.y - v0.pos.y;
-	int b20 = v0.pos.x - v2.pos.x;
-
-	vec2i p = { minX, minY };
-
-	int w0_row = Orient2D(v1.pos, v2.pos, p);
-	int w1_row = Orient2D(v2.pos, v0.pos, p);
-	int w2_row = Orient2D(v0.pos, v1.pos, p);
-
-	for (p.y = minY; p.y <= maxY; ++p.y)
-	{
-		int w0 = w0_row;
-		int w1 = w1_row;
-		int w2 = w2_row;
-
-		for (p.x = minX; p.x <= maxX; ++p.x)
-		{
-			// Calculate barycentric coordinates.
-			// w0 + w1 + w2 = 2(Area of triangle v0v1v2)
-//			int w0 = Orient2D(v1.pos, v2.pos, p);  // Among values in the triangle, this is largest when p = v0.pos
-//			int w1 = Orient2D(v2.pos, v0.pos, p);  // Same for p = v1.pos
-//			int w2 = Orient2D(v0.pos, v1.pos, p);  // Etc...
-
-			// If any of w0, w1, w2 are negative, the point is outside the triangle.
-			if ((w0 | w1 | w2) >= 0)
-			{
-				Color c0 = v0.color;
-				Color c1 = v1.color;
-				Color c2 = v2.color;
-
-				// Interpolate colors.  Should work identically for UVs, depth, or any other linear interpolation.
-				uint totalWeight = (w0 + w1 + w2);
-				if (totalWeight > 0)
-				{
-					uint r = (c0.r*w0 + c1.r*w1 + c2.r*w2) / totalWeight;
-					uint g = (c0.g*w0 + c1.g*w1 + c2.g*w2) / totalWeight;
-					uint b = (c0.b*w0 + c1.b*w1 + c2.b*w2) / totalWeight;
-					uint a = (c0.a*w0 + c1.a*w1 + c2.a*w2) / totalWeight;
-				}
-
-				SetPixel(backbuffer, p.x, p.y, RGBA32(c0.r, c0.g, c0.b, c0.a));
-			}
-
-			w0 += a12;
-			w1 += a20;
-			w2 += a01;
-		}
-
-		w0_row += b12;
-		w1_row += b20;
-		w2_row += b01;
-	}
-}
-
-struct mat2x2
-{
-	float _00; float _01;
-	float _10; float _11;
-};
-
-static void
-RotateVec(vec2i * v, float angle)
-{
-	vec2i rv = *v;
-
-	mat2x2 transform = {
-		cos(angle), -sin(angle),
-		sin(angle), cos(angle)
-	};
-
-	rv.x = (int)(v->x * transform._00 + v->y* transform._01);
-	rv.y = (int)(v->x * transform._10 + v->y * transform._11);
-
-	*v = rv;
-}
-
-
-/*static void
-Rasterize(win32_backbuffer * backbuffer, const vec4& v0, const vec4& v1, const vec4& v2, Color color)
-{
-	vec2i a = { (int)((v0.x / v0.w + 1.0f) * (gScreenWidth / 2.0f)), (int)((v0.y / v0.w + 1.0f) * (gScreenHeight / 2.0f)) };
-	vec2i b = { (int)((v1.x / v1.w + 1.0f) * (gScreenWidth / 2.0f)), (int)((v1.y / v0.w + 1.0f) * (gScreenHeight / 2.0f)) };
-	vec2i c = { (int)((v2.x / v2.w + 1.0f) * (gScreenWidth / 2.0f)), (int)((v2.y / v0.w + 1.0f) * (gScreenHeight / 2.0f)) };
-
-	vertex verts[3] = {
-		{ a, color },
-		{ b, color },
-		{ c, color },
-	};
-
-	RasterizeTriangle(backbuffer, verts[0], verts[1], verts[2]);
-}*/
 
 // Compute (twice) the area of the triangle abc.
 static float
@@ -625,10 +518,10 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color color)
 	float maxX = max3(v0.x, v1.x, v2.x);
 	float maxY = max3(v0.y, v1.y, v2.y);
 
-	minX = min(minX, 0);
-	minY = min(minY, 0);
-	maxX = max(maxX, gScreenWidth - 1.0f);
-	maxY = max(maxY, gScreenHeight - 1.0f);
+	minX = max(minX, 0);
+	minY = max(minY, 0);
+	maxX = min(maxX, gScreenWidth - 1.0f);
+	maxY = min(maxY, gScreenHeight - 1.0f);
 
 	float a01 = v0.y - v1.y;
 	float b01 = v1.x - v0.x;
@@ -685,17 +578,23 @@ void RenderTest(win32_backbuffer * backbuffer)
 	float f = 1000.0f;
 	static const mat4x4 frustumMatrix = FrustumMatrix(r, l, t, b, n, f);
 
-	static float angle = 0.0f;
-	mat4x4 rotationMatrix = TranslationMatrix(0.0f, 0.0f, 15.0f); //* RotationMatrix(angle, RA_Y) * RotationMatrix(angle, RA_X) * RotationMatrix(angle, RA_Z);
-	vec4 axis = { 1.0f, 0.0f, 0.f, 0.0f };
-	quaternion rotation = RotationAroundAxis(angle, axis);
-	mat4x4 quatMatrix = RotationFromQuaternion(rotation);
+	static const vec3 scale = { 1.0f, 1.0f, 1.0f };
+	static const vec3 position = { 0.0f, 0.0f, 15.0f };
 
+	static float angle = 0.0f;
+	vec4 axis = { 1.0f, 0.5f, 0.0f, 0.0f };
+	quaternion rotation = RotationAroundAxis(angle, axis);
+	mat4x4 transform = MakeTransformMatrix(rotation, scale, position);
 	angle += 0.1f;
+
+	static const vec3 scale2 = { 0.5f, 1.5f, 0.5f };
+	static const vec3 position2 = { 10.0f, 1.0f, 5.0f };
+	static const quaternion rot2 = RotationAroundAxis((float)M_PI_4, axis);
+	static const mat4x4 transform2 = MakeTransformMatrix(rot2, scale2, position2);
 
 	static const int vertexCount = 36;
 
-	vec4 verts[vertexCount] = {
+	static const vec4 verts[vertexCount] = {
 		{ -1.0f, -1.0f, -1.0f, 1.0f },
 		{ -1.0f, -1.0f,  1.0f, 1.0f },
 		{ -1.0f,  1.0f,  1.0f, 1.0f },
@@ -746,48 +645,33 @@ void RenderTest(win32_backbuffer * backbuffer)
 	};
 	
 	vec4 transformedVerts[vertexCount];
-	for (int i = 0; i < vertexCount; ++i) transformedVerts[i] = verts[i];
-
+	memcpy(transformedVerts, verts, sizeof(vec4) * vertexCount);
 	for (int i = 0; i < vertexCount; i += 3)
 	{
-		transformedVerts[i]     = quatMatrix * transformedVerts[i];
-		transformedVerts[i + 1] = quatMatrix * transformedVerts[i + 1];
-		transformedVerts[i + 2] = quatMatrix * transformedVerts[i + 2];
-		transformedVerts[i]     = rotationMatrix * transformedVerts[i];
-		transformedVerts[i + 1] = rotationMatrix * transformedVerts[i + 1];
-		transformedVerts[i + 2] = rotationMatrix * transformedVerts[i + 2];
+		transformedVerts[i]     = transform * transformedVerts[i];
+		transformedVerts[i + 1] = transform * transformedVerts[i + 1];
+		transformedVerts[i + 2] = transform * transformedVerts[i + 2];
+
 		transformedVerts[i]     = frustumMatrix * transformedVerts[i];
 		transformedVerts[i + 1] = frustumMatrix * transformedVerts[i + 1];
 		transformedVerts[i + 2] = frustumMatrix * transformedVerts[i + 2];
 
 		Rasterize(backbuffer, transformedVerts[i], transformedVerts[i + 1], transformedVerts[i + 2], faceColors[(i / 3) % 6]);
 	}
-	/*
-	mat4x4 translMatrix = { 0.0f };
-	translMatrix.a0 = 1.0f;
-	translMatrix.b1 = 1.0f;
-	translMatrix.c2 = 1.0f;
-	
-	static float dist = 1.0f;
 
-	translMatrix.a3 = 0.0f;
-	translMatrix.b3 = 0.0f;
-	translMatrix.c3 = -1.0f * dist;
-	translMatrix.d3 = 1.0f;
-
-	dist += 10.0f;
-
+	memcpy(transformedVerts, verts, sizeof(vec4) * vertexCount);
 	for (int i = 0; i < vertexCount; i += 3)
 	{
-		verts[i]	 = translMatrix * verts[i];
-		verts[i + 1] = translMatrix * verts[i + 1];
-		verts[i + 2] = translMatrix * verts[i + 2];
-		transformedVerts[i]     = frustumMatrix * verts[i];
-		transformedVerts[i + 1] = frustumMatrix * verts[i + 1];
-		transformedVerts[i + 2] = frustumMatrix * verts[i + 2];
+		transformedVerts[i]     = transform2 * transformedVerts[i];
+		transformedVerts[i + 1] = transform2 * transformedVerts[i + 1];
+		transformedVerts[i + 2] = transform2 * transformedVerts[i + 2];
+
+		transformedVerts[i]     = frustumMatrix * transformedVerts[i];
+		transformedVerts[i + 1] = frustumMatrix * transformedVerts[i + 1];
+		transformedVerts[i + 2] = frustumMatrix * transformedVerts[i + 2];
 
 		Rasterize(backbuffer, transformedVerts[i], transformedVerts[i + 1], transformedVerts[i + 2], faceColors[(i / 3) % 6]);
-	}*/
+	}
 }
 
 static u64
@@ -836,12 +720,6 @@ WinMain(HINSTANCE hInstance,
 
 	gRunning = true;
 
-	vertex v0 = { { 0, gScreenHeight }, Color(0xff, 0, 0, 0xff) };
-	vertex v1 = { { 0, 0 }, Color(0, 0, 0, 0xff) };
-	vertex v2 = { { gScreenWidth, 0 }, Color(0xff, 0, 0, 0xff) };
-	vertex v3 = { { gScreenWidth, gScreenHeight }, Color(0xff, 0xff, 0xff, 0xff) };
-
-	
 	TestMatrixMultiply();
 
 
@@ -857,9 +735,6 @@ WinMain(HINSTANCE hInstance,
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}
-
-//		RasterizeTriangle(&backbuffer, v0, v1, v2);
-//		RasterizeTriangle(&backbuffer, v0, v2, v3);
 
 		RECT clientRect;
 		GetClientRect(window, &clientRect);
