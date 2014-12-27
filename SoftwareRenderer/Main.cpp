@@ -35,6 +35,95 @@ struct mat4x4
 	float d0; float d1; float d2; float d3;
 };
 
+struct vec3
+{
+	float x;
+	float y;
+	float z;
+};
+
+struct quaternion
+{
+	float w;
+	float x;
+	float y;
+	float z;
+};
+
+quaternion RotationAroundAxis(float theta, vec4 axis)
+{
+	float halfTheta = theta / 2.0f;
+	float sinHalfTheta = sin(halfTheta);
+	quaternion q = {
+		cos(halfTheta),
+		axis.x * sinHalfTheta,
+		axis.y * sinHalfTheta,
+		axis.z * sinHalfTheta
+	};
+
+	return q;
+}
+
+quaternion QuaternionInverse(quaternion q)
+{
+	float sqrMagnitude = q.w*q.w + q.x*q.x + q.y*q.y + q.z*q.z;
+	quaternion inverse = { 
+		q.w / sqrMagnitude, 
+		-q.x / sqrMagnitude, 
+		-q.y / sqrMagnitude, 
+		-q.z / sqrMagnitude 
+	};
+
+	return inverse;
+}
+
+mat4x4 RotationFromQuaternion(const quaternion& q)
+{
+	mat4x4 rv = {
+		1 - 2*q.y*q.y - 2*q.z*q.z, 2*q.x*q.y - 2*q.w*q.z,     2*q.x*q.z + 2*q.w*q.y,     0.0f,
+		2*q.x*q.y + 2*q.w*q.z,     1 - 2*q.x*q.x - 2*q.z*q.z, 2*q.y*q.z - 2*q.w*q.x,     0.0f,
+		2*q.x*q.z - 2*q.w*q.y,     2*q.y*q.z + 2*q.w*q.x,     1 - 2*q.x*q.x - 2*q.y*q.y, 0.0f,
+		0.0f,                      0.0f,                      0.0f,                      1.0f
+	};
+
+	return rv;
+}
+
+quaternion operator*(const quaternion& q1, const quaternion& q2)
+{
+	quaternion rv = {
+		q1.w*q2.w - q1.x*q2.x - q1.y*q2.y - q1.z*q2.z,
+		q1.w*q2.x + q1.x*q2.w + q1.y*q2.z - q1.z*q2.y,
+		q1.w*q2.y - q1.x*q2.z + q1.y*q2.w + q1.z*q2.x,
+		q1.w*q2.z + q1.z*q2.y - q1.y*q2.x + q1.z*q2.w
+	};
+	return rv;
+}
+
+vec4 operator*(const quaternion& q, const vec4& v)
+{
+	// TODO: this math is wrong.  Simply upconverting the
+	// vector to a quaternion is not the right approach.
+	// Most engines appear to just convert to a rotation matrix
+	// to apply to a vector.
+	//
+	// The only example I've found of actual vector / quaternion
+	// multiplication is here:
+	// https://github.com/okamstudio/godot/blob/master/core/math/quat.h
+	//
+	// Need to analyse what, exactly, is going on there.  Perhaps 
+	// start with the equivlent matrix product and see if it can be
+	// reasonably simplified?
+	quaternion inverse = QuaternionInverse(q);
+	quaternion vecAsQuat = { 1.0f, v.x, v.y, v.z };
+
+	quaternion result = q * vecAsQuat * inverse;
+
+	vec4 rv = { result.x, result.y, result.z, v.w };
+
+	return rv;
+}
+
 void DEBUGPrintMat4x4(const mat4x4& m)
 {
 	wchar_t buffer[256] = {0};
@@ -119,6 +208,18 @@ mat4x4 TranslationMatrix(float dx, float dy, float dz)
 	return rv;
 }
 
+
+mat4x4 MakeTransformMatrix(quaternion rotation, vec3 scale, vec3 position)
+{
+	mat4x4 quatMatrix = RotationFromQuaternion(rotation);
+	mat4x4 transform = {
+		scale.x * quatMatrix.a0, scale.y * quatMatrix.a1, scale.z * quatMatrix.a2, position.x,
+		scale.x * quatMatrix.b0, scale.y * quatMatrix.b1, scale.z * quatMatrix.b2, position.y,
+		scale.x * quatMatrix.c0, scale.y * quatMatrix.c1, scale.z * quatMatrix.c2, position.z,
+		0.0f,                    0.0f,                    0.0f,                    1.0f
+	};
+	return transform;
+}
 
 /*
             [cos(theta) -sin(theta) 0]
@@ -228,6 +329,11 @@ void TestMatrixMultiply()
 	DEBUGPrintMat4x4(rotMat);
 	DEBUGPrintVec4(rotMat * testVec);
 
+	OutputDebugStringW(L"\n90 degree quaternion rotation around Y:\n");
+
+	vec4 yAxis = { 0.0f, 1.0f, 0.0f, 0.0f };
+	quaternion quat = RotationAroundAxis(M_PI_2, yAxis);
+	DEBUGPrintVec4(quat * testVec);
 }
 
 LRESULT CALLBACK
@@ -547,7 +653,7 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color color)
 		{
 			if (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) 
 			{
-				SetPixel(backbuffer, (int)p.x, (int)p.y, RGBA32(color.r, color.g, color.b, color.a));
+				SetPixel(backbuffer, (int)(p.x + 0.5f), (int)(p.y + 0.5f), RGBA32(color.r, color.g, color.b, color.a));
 			}
 			w0 += a12;
 			w1 += a20;
@@ -577,10 +683,13 @@ void RenderTest(win32_backbuffer * backbuffer)
 	float b = (gScreenHeight / 2.0f);
 	float n = -1000.0f;
 	float f = 1000.0f;
-	mat4x4 frustumMatrix = FrustumMatrix(r, l, t, b, n, f);
+	static const mat4x4 frustumMatrix = FrustumMatrix(r, l, t, b, n, f);
 
 	static float angle = 0.0f;
-	mat4x4 rotationMatrix = TranslationMatrix(0.0f, 0.0f, 15.0f) * RotationMatrix(angle, RA_Y) * RotationMatrix(angle, RA_X) * RotationMatrix(angle, RA_Z);
+	mat4x4 rotationMatrix = TranslationMatrix(0.0f, 0.0f, 15.0f); //* RotationMatrix(angle, RA_Y) * RotationMatrix(angle, RA_X) * RotationMatrix(angle, RA_Z);
+	vec4 axis = { 1.0f, 0.0f, 0.f, 0.0f };
+	quaternion rotation = RotationAroundAxis(angle, axis);
+	mat4x4 quatMatrix = RotationFromQuaternion(rotation);
 
 	angle += 0.1f;
 
@@ -635,13 +744,18 @@ void RenderTest(win32_backbuffer * backbuffer)
 		{ -1.0f,  1.0f,  1.0f, 1.0f },
 		{  1.0f, -1.0f,  1.0f, 1.0f },
 	};
-
+	
 	vec4 transformedVerts[vertexCount];
+	for (int i = 0; i < vertexCount; ++i) transformedVerts[i] = verts[i];
+
 	for (int i = 0; i < vertexCount; i += 3)
 	{
-		transformedVerts[i]     = rotationMatrix * verts[i];
-		transformedVerts[i + 1] = rotationMatrix * verts[i + 1];
-		transformedVerts[i + 2] = rotationMatrix * verts[i + 2];
+		transformedVerts[i]     = quatMatrix * transformedVerts[i];
+		transformedVerts[i + 1] = quatMatrix * transformedVerts[i + 1];
+		transformedVerts[i + 2] = quatMatrix * transformedVerts[i + 2];
+		transformedVerts[i]     = rotationMatrix * transformedVerts[i];
+		transformedVerts[i + 1] = rotationMatrix * transformedVerts[i + 1];
+		transformedVerts[i + 2] = rotationMatrix * transformedVerts[i + 2];
 		transformedVerts[i]     = frustumMatrix * transformedVerts[i];
 		transformedVerts[i + 1] = frustumMatrix * transformedVerts[i + 1];
 		transformedVerts[i + 2] = frustumMatrix * transformedVerts[i + 2];
