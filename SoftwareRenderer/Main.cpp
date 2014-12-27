@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cfloat>
 
 #define min3(a, b, c) min(a, min(b, c))
 #define max3(a, b, c) max(a, max(b, c))
@@ -401,6 +402,8 @@ Win32AllocateDIBSection(win32_backbuffer * backbuffer, int width, int height)
 	backbuffer->bmpHandle = CreateDIBSection(backbuffer->bmpHdc, &backbuffer->bmpInfo, DIB_RGB_COLORS, &backbuffer->bmpMemory, NULL, 0);
 
 	assert(backbuffer->bmpHandle);
+
+	backbuffer->depthBuffer = (float *)calloc(sizeof(float), width * height);
 }
 
 static void
@@ -413,6 +416,7 @@ Win32ClearBackbuffer(win32_backbuffer * backbuffer, u32 color)
 	for (int i = 0; i < width * height; ++i)
 	{
 		pixels[i] = color;
+		backbuffer->depthBuffer[i] = -FLT_MAX;
 	}
 }
 
@@ -481,7 +485,7 @@ RenderTestGradient(win32_backbuffer * backbuffer)
 //
 
 static void
-SetPixel(win32_backbuffer * backbuffer, int x, int y, u32 color)
+SetPixel(win32_backbuffer * backbuffer, int x, int y, u32 color, float depth)
 {
 	int width = backbuffer->bmpInfo.bmiHeader.biWidth;
 	int height = backbuffer->bmpInfo.bmiHeader.biHeight;
@@ -489,8 +493,14 @@ SetPixel(win32_backbuffer * backbuffer, int x, int y, u32 color)
 	assert(x >= 0 && x < width);
 	assert(y >= 0 && y < height);
 
-	u32 * pixels = (u32 *)backbuffer->bmpMemory;
-	pixels[y * width + x] = color;
+	int idx = y * width + x;
+
+	if (depth > backbuffer->depthBuffer[idx])
+	{
+		u32 * pixels = (u32 *)backbuffer->bmpMemory;
+		pixels[idx] = color;
+		backbuffer->depthBuffer[idx] = depth;
+	}
 }
 
 // Compute (twice) the area of the triangle abc.
@@ -546,7 +556,8 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color color)
 		{
 			if (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) 
 			{
-				SetPixel(backbuffer, (int)(p.x + 0.5f), (int)(p.y + 0.5f), RGBA32(color.r, color.g, color.b, color.a));
+				float depth = (v0.w * w0 + v1.w * w1 + v2.w * w2) / (w0 + w1 + w2); 
+				SetPixel(backbuffer, (int)(p.x + 0.5f), (int)(p.y + 0.5f), RGBA32(color.r, color.g, color.b, color.a), depth);
 			}
 			w0 += a12;
 			w1 += a20;
@@ -588,7 +599,7 @@ void RenderTest(win32_backbuffer * backbuffer)
 	angle += 0.1f;
 
 	static const vec3 scale2 = { 0.5f, 1.5f, 0.5f };
-	static const vec3 position2 = { 10.0f, 1.0f, 5.0f };
+	static const vec3 position2 = { 1.0f, 1.0f, 20.0f };
 	static const quaternion rot2 = RotationAroundAxis((float)M_PI_4, axis);
 	static const mat4x4 transform2 = MakeTransformMatrix(rot2, scale2, position2);
 
