@@ -445,10 +445,10 @@ struct Color
 	float a;
 
 	Color(float _r, float _g, float _b, float _a) :
-		r(_r),
-		g(_g),
-		b(_b),
-		a(_a)
+		r(clamp(_r, 0.0f, 1.0f)),
+		g(clamp(_g, 0.0f, 1.0f)),
+		b(clamp(_b, 0.0f, 1.0f)),
+		a(clamp(_a, 0.0f, 1.0f))
 	{
 	}
 
@@ -464,12 +464,53 @@ struct Color
 	{
 		u8 alpha = (u8)(a * 255.0f);
 		u8 red   = (u8)(r * 255.0f);
-		u8 blue  = (u8)(b * 255.0f);
 		u8 green = (u8)(g * 255.0f);
+		u8 blue  = (u8)(b * 255.0f);
 
 		return RGBA32(red, green, blue, alpha);
 	}
+
+	Color& operator*=(float f)
+	{
+		f = clamp(f, 0.0f, 1.0f);
+		r*=f;
+		g*=f;
+		b*=f;
+
+		return *this;
+	}
+
+	Color& operator*=(const Color& c2)
+	{
+		r*=c2.r;
+		g*=c2.g;
+		b*=c2.b;
+		a*=c2.a;
+
+		return *this;
+	}
 };
+
+Color operator*(const Color& c1, float f)
+{
+	f = clamp(f, 0.0f, 1.0f);
+	return Color(c1.r*f, c1.g*f, c1.b*f, c1.a);
+}
+
+Color operator*(const Color& c1, const Color& c2)
+{
+	return Color(c1.r*c2.r, c1.g*c2.g, c1.b*c2.b, c1.a*c2.a);
+}
+
+Color operator+(const Color& c1, const Color& c2)
+{
+	float r = clamp((c1.r + c2.r), 0.0f, 1.0f);
+	float g = clamp((c1.g + c2.g), 0.0f, 1.0f);
+	float b = clamp((c1.b + c2.b), 0.0f, 1.0f);
+	float a = clamp((c1.a + c2.a), 0.0f, 1.0f);
+
+	return Color(r, g, b, a);
+}
 
 static void 
 RenderTestGradient(win32_backbuffer * backbuffer)
@@ -527,7 +568,7 @@ static bool IsTopLeft(const vec4& a, const vec4& b)
 }
 
 static void
-Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color color)
+Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Color c1, Color c2)
 {
 	float screenHalfWidth = gScreenWidth / 2.0f;
 	float screenHalfHeight = gScreenHeight / 2.0f;
@@ -580,7 +621,14 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color color)
 		{
 			if (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) 
 			{
-				float depth = (v0.w * w0 + v1.w * w1 + v2.w * w2) / (w0 + w1 + w2);
+				float weightSum = (w0 + w1 + w2);
+				float depth = (v0.w * w0 + v1.w * w1 + v2.w * w2) / weightSum;
+				float r = (c0.r * w0 + c1.r * w1 + c2.r * w2) / weightSum;
+				float g = (c0.g * w0 + c1.g * w1 + c2.g * w2) / weightSum;
+				float b = (c0.b * w0 + c1.b * w1 + c2.b * w2) / weightSum;
+				float a = (c0.a * w0 + c1.a * w1 + c2.a * w2) / weightSum;
+				Color color(r, g, b, a);
+
 				SetPixel(backbuffer, (int)(p.x + 0.5f), (int)(p.y + 0.5f), color.rgba(), depth);
 			}
 			w0 += a12;
@@ -624,7 +672,8 @@ static void RenderMesh(win32_backbuffer * backbuffer, const vec4 * vertices, int
 		transformedVerts[i + 1] = frustumMatrix * transform * transformedVerts[i + 1];
 		transformedVerts[i + 2] = frustumMatrix * transform * transformedVerts[i + 2];
 
-		Rasterize(backbuffer, transformedVerts[i], transformedVerts[i + 1], transformedVerts[i + 2], faceColors[(i / 3) % 6]);
+		Rasterize(backbuffer, transformedVerts[i], transformedVerts[i + 1], transformedVerts[i + 2], 
+			faceColors[i % 6], faceColors[(i + 1) % 6], faceColors[(i + 2) % 6]);
 	}
 }
 
