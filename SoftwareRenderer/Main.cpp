@@ -20,6 +20,19 @@ static const int gScreenWidth = 1280;
 static const int gScreenHeight = 720;
 static bool gRunning;
 
+struct vec2
+{
+	float x;
+	float y;
+};
+
+struct vec3
+{
+	float x;
+	float y;
+	float z;
+};
+
 struct vec4
 {
 	float x;
@@ -34,13 +47,6 @@ struct mat4x4
 	float b0; float b1; float b2; float b3;
 	float c0; float c1; float c2; float c3;
 	float d0; float d1; float d2; float d3;
-};
-
-struct vec3
-{
-	float x;
-	float y;
-	float z;
 };
 
 struct quaternion
@@ -512,6 +518,186 @@ Color operator+(const Color& c1, const Color& c2)
 	return Color(r, g, b, a);
 }
 
+struct Texture;
+
+struct Material
+{
+	Color ambientColor;
+	Color diffuseColor;
+	Color specularColor;
+	float specularIntensity;
+	u8 illumType;
+
+	Texture * ambientTexture;
+	Texture * diffuseTexture;
+	char * name;
+};
+
+struct Mesh
+{
+	u32 vertexCount;
+	vec4 * vertices;
+	u32 uvwCount;
+	vec3 * uvws;
+	u32 normalCount;
+	vec3 * normals;
+
+	u32 indexCount;
+	uint * indices;
+
+	Material * material;
+	char * name;
+};
+
+static bool ReadLine(const char ** lineStart, const char ** lineEnd, const char ** fileCur) {
+    const char *cur = *fileCur;
+    if (!*cur) {
+        return false; // EOF
+    }
+ 
+    while (*cur == ' ' || *cur == '\t') {
+        ++cur;
+    }
+ 
+    *lineStart = cur;
+ 
+    const char * end = cur;
+    while (true) {
+        char ch = *cur++;
+        if (!ch) {
+            --cur;  // Preserve terminating NUL
+            break;
+        }
+        else if (ch == '\n') {
+            break;
+        }
+        else if (!isspace(ch)) {
+            end = cur;
+        }
+    }
+ 
+    *lineEnd = end;
+    *fileCur = cur;
+ 
+    return true;
+}
+
+int ReadUint8(u8 * u, const char * c)
+{
+	const char * start = c;
+	const char * end;
+
+	while (*c && !isdigit(*c)) ++c;
+
+	*u = (u8)atoi(c);
+
+	while (*c && isdigit(*c)) ++c;
+	end = c;
+
+	return end - start;
+}
+
+int ReadFloat32(float * f, const char * c)
+{
+	const char * start = c;
+	const char * end;
+	while (*c && !isdigit(*c)) ++c;
+	
+	*f = (float)atof(c);
+
+	while (*c && (isdigit(*c) || *c == '.')) ++c;
+	end = c;
+
+	return end - start;
+}
+
+int ReadColor(Color * color, const char * c)
+{
+	color->a = 1.0f; // Colors are given as RGB, no alpha channel.
+
+	const char * start = c;
+	const char * end;
+
+	while (*c && !(isdigit(*c))) ++c;
+
+	c += ReadFloat32(&color->r, c);
+	c += ReadFloat32(&color->g, c);
+	c += ReadFloat32(&color->b, c);
+
+	end = c;
+
+	return end - start;
+}
+
+// NOTE: Only loads the first material in a .mtl file.
+// TODO: Figure out a proper API for returning multiple materials.  
+// We would rather avoid returning allocated memory if possible.
+// Store all results in a resource cache and return a pointer into that?
+// Then need to allow queries by name for a particular material.
+void LoadMaterial(char * filename, Material * material)
+{
+	FILE * file = fopen(filename, "r");
+	fseek(file, 0, SEEK_END);
+	u32 fileLength = ftell(file);  // This is a minimum, may overestimate length of text files.
+	fseek(file, 0, SEEK_SET);
+
+	char * bytes = (char *)calloc(1, fileLength);
+	fileLength = fread(bytes, 1, fileLength, file);
+
+	// Clear material struct
+	memset(material, sizeof(Material), 0);
+
+	const char * cur;
+	const char * lineStart;
+	const char * lineEnd;
+
+	while (ReadLine(&lineStart, &lineEnd, &cur))
+	{
+		if (lineStart[0] == '#') continue;  // Comment
+
+		if (!strncmp(lineStart, "newmtl", 6))
+		{
+			if (material->name) 
+			{
+				// We've already loaded a material.
+				// TODO:  Loading for multiple materials.
+				break;
+			}
+			const char * nameStart = lineStart + 6;
+			const char * nameEnd = lineEnd;
+
+			int nameLength = (nameEnd - nameStart) + 1;
+			material->name = (char *)calloc(1, nameLength);
+			strncpy(material->name, nameStart, nameLength);
+		}
+		else if (!strncmp(lineStart, "Ns", 2))
+		{
+			ReadFloat32(&material->specularIntensity, lineStart);
+		}
+		else if (!strncmp(lineStart, "illum", 5))
+		{
+			ReadUint8(&material->illumType, lineStart);
+		}
+		else if (*lineStart == 'K')
+		{
+			lineStart++;
+			if      (*lineStart == 'a') ReadColor(&material->ambientColor, lineStart);
+			else if (*lineStart == 'd') ReadColor(&material->diffuseColor, lineStart);
+			else if (*lineStart == 's') ReadColor(&material->specularColor, lineStart);
+		}
+		else if (!strncmp(lineStart, "map_", 4))
+		{
+			// TODO:  Texture map.
+		}
+	}
+
+	free(bytes);
+}
+
+void LoadMesh(char * filename, Mesh * mesh)
+{
+}
+
 static void 
 RenderTestGradient(win32_backbuffer * backbuffer)
 {
@@ -573,6 +759,7 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Co
 	float screenHalfWidth = gScreenWidth / 2.0f;
 	float screenHalfHeight = gScreenHeight / 2.0f;
 
+	// Map x and y to screen coordinates.
 	v0.x = ((v0.x / v0.w) + 1.0f) * screenHalfWidth;
 	v0.y = ((v0.y / v0.w) + 1.0f) * screenHalfHeight;
 	v1.x = ((v1.x / v1.w) + 1.0f) * screenHalfWidth;
@@ -580,13 +767,16 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Co
 	v2.x = ((v2.x / v2.w) + 1.0f) * screenHalfWidth;
 	v2.y = ((v2.y / v2.w) + 1.0f) * screenHalfHeight;
 
+	// Near-clip test.
 	if (v0.w > 0.0f || v1.w > 0.0f || v2.w > 0.0f) return;
 
+	// Calculate triangle bounding box
 	float minX = min3(v0.x, v1.x, v2.x);
 	float minY = min3(v0.y, v1.y, v2.y);
 	float maxX = max3(v0.x, v1.x, v2.x);
 	float maxY = max3(v0.y, v1.y, v2.y);
 
+	// Clip bounding box to screen.
 	minX = max(minX, 0);
 	minY = max(minY, 0);
 	maxX = min(maxX, gScreenWidth - 1.0f);
@@ -594,6 +784,7 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Co
 
 	float stepSize = 0.5f; // Pixels to step in each direction.
 
+	// Per-step deltas for barycentric weights.
 	float a01 = (v0.y - v1.y) * stepSize;
 	float b01 = (v1.x - v0.x) * stepSize;
 	float a12 = (v1.y - v2.y) * stepSize;
@@ -603,10 +794,12 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Co
 
 	vec4 p = { minX, minY, 0.0f, 1.0f };
 
+	// Fill-rule bias
 	float bias0 = IsTopLeft(v1, v2) ? 0.0f : -1.0f;
 	float bias1 = IsTopLeft(v2, v0) ? 0.0f : -1.0f;
 	float bias2 = IsTopLeft(v0, v1) ? 0.0f : -1.0f;
 	
+	// Calculate barycentric coordinates for first pixel.
 	float w0_row = Orient2D(v1, v2, p) + bias0;
 	float w1_row = Orient2D(v2, v0, p) + bias1;
 	float w2_row = Orient2D(v0, v1, p) + bias2;
