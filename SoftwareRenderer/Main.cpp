@@ -439,12 +439,12 @@ Win32RedrawWindow(HWND window, int x, int y, int width, int height, win32_backbu
 
 struct Color
 {
-	u8 r;
-	u8 g;
-	u8 b;
-	u8 a;
+	float r;
+	float g;
+	float b;
+	float a;
 
-	Color(u8 _r, u8 _g, u8 _b, u8 _a) :
+	Color(float _r, float _g, float _b, float _a) :
 		r(_r),
 		g(_g),
 		b(_b),
@@ -454,10 +454,20 @@ struct Color
 
 	Color(u32 rgba)
 	{
-		a = (rgba & 0xff000000) >> 24;
-		r = (rgba & 0x00ff0000) >> 16;
-		g = (rgba & 0x0000ff00) >> 8;
-		b = (rgba & 0x000000ff);
+		a = ((rgba & 0xff000000) >> 24) / 255.0f;
+		r = ((rgba & 0x00ff0000) >> 16) / 255.0f;
+		g = ((rgba & 0x0000ff00) >> 8 ) / 255.0f;
+		b = ((rgba & 0x000000ff)      ) / 255.0f;
+	}
+
+	u32 rgba() const
+	{
+		u8 alpha = (u8)(a * 255.0f);
+		u8 red   = (u8)(r * 255.0f);
+		u8 blue  = (u8)(b * 255.0f);
+		u8 green = (u8)(g * 255.0f);
+
+		return RGBA32(red, green, blue, alpha);
 	}
 };
 
@@ -570,8 +580,8 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color color)
 		{
 			if (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) 
 			{
-				float depth = (v0.w * w0 + v1.w * w1 + v2.w * w2) / (w0 + w1 + w2); 
-				SetPixel(backbuffer, (int)(p.x + 0.5f), (int)(p.y + 0.5f), RGBA32(color.r, color.g, color.b, color.a), depth);
+				float depth = (v0.w * w0 + v1.w * w1 + v2.w * w2) / (w0 + w1 + w2);
+				SetPixel(backbuffer, (int)(p.x + 0.5f), (int)(p.y + 0.5f), color.rgba(), depth);
 			}
 			w0 += a12;
 			w1 += a20;
@@ -585,12 +595,12 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color color)
 }
 
 static Color faceColors[6] = {
-	Color(0xff, 0xff, 0xff, 0xff),
-	Color(0xff,    0,    0, 0xff),
-	Color(   0, 0xff,    0, 0xff),
-	Color(   0,    0, 0xff, 0xff),
-	Color(0xff, 0xff,    0, 0xff),
-	Color(0xff,    0, 0xff, 0xff),
+	Color(1.0f, 1.0f, 1.0f, 1.0f),
+	Color(1.0f, 0.0f, 0.0f, 1.0f),
+	Color(0.0f, 1.0f, 0.0f, 1.0f),
+	Color(0.0f, 0.0f, 1.0f, 1.0f),
+	Color(1.0f, 1.0f, 0.0f, 1.0f),
+	Color(1.0f, 0.0f, 1.0f, 1.0f),
 };
 
 static void RenderMesh(win32_backbuffer * backbuffer, const vec4 * vertices, int vertexCount, const mat4x4& transform)
@@ -610,13 +620,9 @@ static void RenderMesh(win32_backbuffer * backbuffer, const vec4 * vertices, int
 	memcpy(transformedVerts, vertices, sizeof(vec4) * vertexCount);
 	for (int i = 0; i < vertexCount; i += 3)
 	{
-		transformedVerts[i]     = transform * transformedVerts[i];
-		transformedVerts[i + 1] = transform * transformedVerts[i + 1];
-		transformedVerts[i + 2] = transform * transformedVerts[i + 2];
-
-		transformedVerts[i]     = frustumMatrix * transformedVerts[i];
-		transformedVerts[i + 1] = frustumMatrix * transformedVerts[i + 1];
-		transformedVerts[i + 2] = frustumMatrix * transformedVerts[i + 2];
+		transformedVerts[i]     = frustumMatrix * transform * transformedVerts[i];
+		transformedVerts[i + 1] = frustumMatrix * transform * transformedVerts[i + 1];
+		transformedVerts[i + 2] = frustumMatrix * transform * transformedVerts[i + 2];
 
 		Rasterize(backbuffer, transformedVerts[i], transformedVerts[i + 1], transformedVerts[i + 2], faceColors[(i / 3) % 6]);
 	}
@@ -672,7 +678,6 @@ static const vec4 meshVerts[meshVertexCount] = {
 	{ -1.0f,  1.0f,  1.0f, 1.0f },
 	{  1.0f, -1.0f,  1.0f, 1.0f },
 };
-
 
 static void RenderTest(win32_backbuffer * backbuffer)
 {
@@ -758,7 +763,7 @@ WinMain(HINSTANCE hInstance,
 
 	TestMatrixMultiply();
 
-	u64 frameTargetMS = 1000 / 15;
+	u64 frameTargetMS = 1000 / 30;
 	u64 perfTicksPerMS = Win32TimerFrequency() / 1000;
 	u64 lastTick = Win32GetPerformanceTimer();
 
@@ -792,11 +797,9 @@ WinMain(HINSTANCE hInstance,
 			OutputDebugStringW(buffer);
 		}
 
-//		u64 msToSleep = frameTargetMS - (elapsedSinceFrameStart / perfTicksPerMS);
+		u64 msToSleep = frameTargetMS - (elapsedSinceFrameStart / perfTicksPerMS);
 
-//		assert(msToSleep < frameTargetMS);  // Check for underflow.
-
-		Sleep(33);
+		if (msToSleep < frameTargetMS) Sleep((DWORD)msToSleep);
 
 		lastTick = Win32GetPerformanceTimer();
 	}
