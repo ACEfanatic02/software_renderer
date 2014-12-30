@@ -7,6 +7,10 @@
 #include <cstdio>
 #include <cfloat>
 
+// Disable warnings about C runtime functions
+// In a production setting this is a bad idea, but this is just proof-of-concept.
+#pragma warning(disable: 4996)
+
 #define min3(a, b, c) min(a, min(b, c))
 #define max3(a, b, c) max(a, max(b, c))
 #define clamp(n, a, b) min(max(n, a), b)
