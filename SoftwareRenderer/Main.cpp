@@ -839,7 +839,7 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Co
 	if (w0_row + w1_row + w2_row < 0.0f) return;
 
 	// Normalized barycentric coordinates (for interpolation)
-	float twice_area = Orient2D(v0, v1, v2);
+	float twice_area = w0_row + w1_row + w2_row;
 	float lambda0_row = w0_row / twice_area;
 	float lambda1_row = w1_row / twice_area;
 	float lambda2_row = w2_row / twice_area;
