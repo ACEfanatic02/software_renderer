@@ -804,34 +804,51 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Co
 	float w1_row = Orient2D(v2, v0, p) + bias1;
 	float w2_row = Orient2D(v0, v1, p) + bias2;
 
+	// Backface culling.
+	if (w0_row + w1_row + w2_row < 0.0f) return;
+
+	// Normalized barycentric coordinates (for interpolation)
+	float twice_area = Orient2D(v0, v1, v2);
+	float lambda0_row = w0_row / twice_area;
+	float lambda1_row = w1_row / twice_area;
+	float lambda2_row = w2_row / twice_area;
+
+	float la12 = a12 / twice_area;
+	float la20 = a20 / twice_area;
+	float la01 = a01 / twice_area;
+
+	float lb12 = b12 / twice_area;
+	float lb20 = b20 / twice_area;
+	float lb01 = b01 / twice_area;
+
 	for (p.y = minY; p.y <= maxY; p.y += stepSize)
 	{
-		float w0 = w0_row;
-		float w1 = w1_row;
-		float w2 = w2_row;
+		float l0 = lambda0_row;
+		float l1 = lambda1_row;
+		float l2 = lambda2_row;
 
 		for (p.x = minX; p.x <= maxX; p.x += stepSize)
 		{
-			if (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) 
+			if (l0 >= 0.0f && l1 >= 0.0f && l2 >= 0.0f) 
 			{
-				float weightSum = (w0 + w1 + w2);
-				float depth = (v0.w * w0 + v1.w * w1 + v2.w * w2) / weightSum;
-				float r = (c0.r * w0 + c1.r * w1 + c2.r * w2) / weightSum;
-				float g = (c0.g * w0 + c1.g * w1 + c2.g * w2) / weightSum;
-				float b = (c0.b * w0 + c1.b * w1 + c2.b * w2) / weightSum;
-				float a = (c0.a * w0 + c1.a * w1 + c2.a * w2) / weightSum;
+				float depth = v0.w + l1*(v1.w - v0.w) + l2*(v2.w - v0.w);
+				float r = c0.r + l1*(c1.r - c0.r) + l2*(c2.r - c0.r);
+				float g = c0.g + l1*(c1.g - c0.g) + l2*(c2.g - c0.g);
+				float b = c0.b + l1*(c1.b - c0.b) + l2*(c2.b - c0.b);
+				float a = c0.a + l1*(c1.a - c0.a) + l2*(c2.a - c0.a);
 				Color color(r, g, b, a);
 
 				SetPixel(backbuffer, (int)(p.x + 0.5f), (int)(p.y + 0.5f), color.rgba(), depth);
 			}
-			w0 += a12;
-			w1 += a20;
-			w2 += a01;
+
+			l0 += la12;
+			l1 += la20;
+			l2 += la01;
 		}
 
-		w0_row += b12;
-		w1_row += b20;
-		w2_row += b01;
+		lambda0_row += lb12;
+		lambda1_row += lb20;
+		lambda2_row += lb01;
 	}
 }
 
@@ -946,6 +963,14 @@ static void RenderTest(win32_backbuffer * backbuffer)
 
 	RenderMesh(backbuffer, &meshVerts[0], meshVertexCount, cameraTransform * transform);
 	RenderMesh(backbuffer, &meshVerts[0], meshVertexCount, cameraTransform * transform2);
+
+	for (int i = 0; i < 4; ++i)
+	{
+		quaternion q = {0, 0, 0, 1}; //RotationAroundAxis((float)M_PI_4 * i, upAxis);
+		vec3 p = { -1.75, -1.75, 2.5f * (i + 1) };
+		mat4x4 t = MakeTransformMatrix(q, scale, p);
+		RenderMesh(backbuffer, &meshVerts[0], meshVertexCount, cameraTransform * t);
+	}
 }
 
 static u64
