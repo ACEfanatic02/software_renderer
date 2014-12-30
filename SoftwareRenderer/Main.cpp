@@ -740,6 +740,33 @@ SetPixel(win32_backbuffer * backbuffer, int x, int y, u32 color, float depth)
 	}
 }
 
+static void
+SetPixel(win32_backbuffer * backbuffer, vec4 p, Color c0, Color c1, Color c2, float d0, float d1, float d2, float l0, float l1, float l2)
+{
+	int width = backbuffer->bmpInfo.bmiHeader.biWidth;
+	int height = backbuffer->bmpInfo.bmiHeader.biHeight;
+
+	int x = (int)(p.x + 0.5f);
+	int y = (int)(p.y + 0.5f);
+
+	int idx = y * width + x;
+
+	float depth = d0 + l1*(d1-d0) + l2*(d2-d0);
+	if (depth > backbuffer->depthBuffer[idx])
+	{
+		u32 * pixels = (u32 *)backbuffer->bmpMemory;
+
+		float r = c0.r + l1*(c1.r - c0.r) + l2*(c2.r - c0.r);
+		float g = c0.g + l1*(c1.g - c0.g) + l2*(c2.g - c0.g);
+		float b = c0.b + l1*(c1.b - c0.b) + l2*(c2.b - c0.b);
+		float a = c0.a + l1*(c1.a - c0.a) + l2*(c2.a - c0.a);
+		Color color(r, g, b, a);
+
+		pixels[idx] = color.rgba();
+		backbuffer->depthBuffer[idx] = depth;
+	}
+}
+
 // Compute (twice) the area of the triangle abc.
 static float
 Orient2D(const vec4& a, const vec4& b, const vec4& c)
@@ -831,6 +858,7 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Co
 		{
 			if (l0 >= 0.0f && l1 >= 0.0f && l2 >= 0.0f) 
 			{
+#ifdef RASTERIZER_SLOW_PATH
 				float depth = v0.w + l1*(v1.w - v0.w) + l2*(v2.w - v0.w);
 				float r = c0.r + l1*(c1.r - c0.r) + l2*(c2.r - c0.r);
 				float g = c0.g + l1*(c1.g - c0.g) + l2*(c2.g - c0.g);
@@ -839,6 +867,9 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Co
 				Color color(r, g, b, a);
 
 				SetPixel(backbuffer, (int)(p.x + 0.5f), (int)(p.y + 0.5f), color.rgba(), depth);
+#else
+				SetPixel(backbuffer, p, c0, c1, c2, v0.w, v1.w, v2.w, l0, l1, l2);
+#endif
 			}
 
 			l0 += la12;
