@@ -7,6 +7,9 @@
 #include <cstdio>
 #include <cfloat>
 
+// For std::sort
+#include <algorithm> 
+
 // Disable warnings about C runtime functions
 // In a production setting this is a bad idea, but this is just proof-of-concept.
 #pragma warning(disable: 4996)
@@ -43,6 +46,8 @@ struct vec4
 	float y;
 	float z;
 	float w;
+
+//	vec4(float _x, float _y, float _z, float _w);
 };
 
 struct mat4x4
@@ -860,6 +865,12 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Co
 
 		for (p.x = minX; p.x <= maxX; p.x += stepSize)
 		{
+			// NOTE (2014-12-30):  This is a (theoretically) slightly cheaper way to handle 
+			// this branch, as it results in a single comparison rather than 3 separate 
+			// comparisons. However, profiling does not show any difference at the moment. 
+			// I am leaving this here, commented out, in case it proves useful at a later time.
+//			u32 mask = *(u32 *)&l0 | *(u32 *)&l1 | *(u32 *)&l2;
+//			if (~mask & 0x80000000)
 			if (l0 >= 0.0f && l1 >= 0.0f && l2 >= 0.0f) 
 			{
 #ifdef RASTERIZER_SLOW_PATH
@@ -896,6 +907,13 @@ static Color faceColors[6] = {
 	Color(1.0f, 0.0f, 1.0f, 1.0f),
 };
 
+struct Triangle
+{
+	vec4 v0;
+	vec4 v1;
+	vec4 v2;
+};
+
 static void RenderMesh(win32_backbuffer * backbuffer, const vec4 * vertices, int vertexCount, const mat4x4& transform)
 {
 	static const int MAX_VERTICES = 1024;
@@ -909,16 +927,23 @@ static void RenderMesh(win32_backbuffer * backbuffer, const vec4 * vertices, int
 	float f = 1000.0f;
 	static const mat4x4 frustumMatrix = FrustumMatrix(r, l, t, b, n, f);
 
-	vec4 transformedVerts[MAX_VERTICES];
-	memcpy(transformedVerts, vertices, sizeof(vec4) * vertexCount);
+	Triangle tris[(MAX_VERTICES / 3) + 1];
 	for (int i = 0; i < vertexCount; i += 3)
 	{
-		transformedVerts[i]     = frustumMatrix * transform * transformedVerts[i];
-		transformedVerts[i + 1] = frustumMatrix * transform * transformedVerts[i + 1];
-		transformedVerts[i + 2] = frustumMatrix * transform * transformedVerts[i + 2];
+		int triIndex = i / 3;
+		tris[triIndex].v0 = frustumMatrix * transform * vertices[i];
+		tris[triIndex].v1 = frustumMatrix * transform * vertices[i + 1];
+		tris[triIndex].v2 = frustumMatrix * transform * vertices[i + 2];
+	}
 
-		Rasterize(backbuffer, transformedVerts[i], transformedVerts[i + 1], transformedVerts[i + 2], 
-			faceColors[i % 6], faceColors[(i + 1) % 6], faceColors[(i + 2) % 6]);
+	std::sort(&tris[0], &tris[vertexCount / 3], [](const Triangle& a, const Triangle& b) {
+		return min3(a.v0.w, a.v1.w, a.v2.w) < min3(b.v0.w, b.v1.w, b.v2.w);
+	});
+
+	for (int i = 0; i < vertexCount / 3; ++i)
+	{ 
+		Rasterize(backbuffer, tris[i].v0, tris[i].v1, tris[i].v2, 
+			faceColors[i % 6], faceColors[i % 6], faceColors[i % 6]);
 	}
 }
 
@@ -972,6 +997,7 @@ static const vec4 meshVerts[meshVertexCount] = {
 	{ -1.0f,  1.0f,  1.0f, 1.0f },
 	{  1.0f, -1.0f,  1.0f, 1.0f },
 };
+
 
 static void RenderTest(win32_backbuffer * backbuffer)
 {
