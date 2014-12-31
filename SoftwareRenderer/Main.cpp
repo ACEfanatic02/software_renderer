@@ -604,13 +604,9 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Co
 
 		for (p.x = minX; p.x <= maxX; p.x += stepSize)
 		{
-			// NOTE (2014-12-30):  This is a (theoretically) slightly cheaper way to handle 
-			// this branch, as it results in a single comparison rather than 3 separate 
-			// comparisons. However, profiling does not show any difference at the moment. 
-			// I am leaving this here, commented out, in case it proves useful at a later time.
-//			u32 mask = *(u32 *)&l0 | *(u32 *)&l1 | *(u32 *)&l2;
-//			if (~mask & 0x80000000)
-			if (l0 >= 0.0f && l1 >= 0.0f && l2 >= 0.0f) 
+			// This is a definite win on larger data sets.
+			u32 mask = *(u32 *)&l0 | *(u32 *)&l1 | *(u32 *)&l2;
+			if (~mask & 0x80000000)
 			{
 #ifdef RASTERIZER_SLOW_PATH
 				float depth = v0.w + l1*(v1.w - v0.w) + l2*(v2.w - v0.w);

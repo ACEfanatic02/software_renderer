@@ -72,10 +72,20 @@ vec4 operator/(vec4 v, float f)
 	return rv;
 }
 
+vec4 operator-(vec4 v1, vec4 v2)
+{
+	return vec4(v1.x-v2.x, v1.y-v2.y, v1.z-v2.z, v1.w-v2.w);
+}
+
 vec4 normalized(vec4 v)
 {
 	float magnitude = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
 	return v / magnitude; 
+}
+
+float magnitude(vec4 v)
+{
+	return sqrtf(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
 }
 
 quaternion RotationAroundAxis(float theta, vec4 axis)
