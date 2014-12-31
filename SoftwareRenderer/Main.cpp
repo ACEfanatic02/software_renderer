@@ -413,8 +413,8 @@ void LoadMesh(char * filename, Mesh * mesh)
 				indices.push_back(indexC - 1);
 				
 				indices.push_back(indexA - 1);
-				indices.push_back(indexD - 1);
 				indices.push_back(indexC - 1);
+				indices.push_back(indexD - 1);
 			}
 			else
 			{
@@ -552,10 +552,10 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Co
 	float maxY = max3(v0.y, v1.y, v2.y);
 
 	// Clip bounding box to screen.
-	minX = max(minX, 0);
-	minY = max(minY, 0);
-	maxX = min(maxX, gScreenWidth - 1.0f);
-	maxY = min(maxY, gScreenHeight - 1.0f);
+	minX = floorf(max(minX, 0));
+	minY = floorf(max(minY, 0));
+	maxX = ceilf(min(maxX, gScreenWidth - 1.0f));
+	maxY = ceilf(min(maxY, gScreenHeight - 1.0f));
 
 	float stepSize = 0.5f; // Pixels to step in each direction.
 
@@ -604,7 +604,8 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Co
 
 		for (p.x = minX; p.x <= maxX; p.x += stepSize)
 		{
-			// This is a definite win on larger data sets.
+			// Test whether any of the barycentric weights are negative.
+			// Using a bitmask here is a definite win on larger meshes.
 			u32 mask = *(u32 *)&l0 | *(u32 *)&l1 | *(u32 *)&l2;
 			if (~mask & 0x80000000)
 			{
@@ -822,7 +823,8 @@ RenderMesh(win32_backbuffer * backbuffer, Mesh * mesh, mat4x4 transform)
 		uint idxA = mesh->indices[i];
 		uint idxB = mesh->indices[i + 1];
 		uint idxC = mesh->indices[i + 2];
-		Rasterize(backbuffer, xformedVerts[idxA], xformedVerts[idxB], xformedVerts[idxC], faceColors[i % 6], faceColors[i % 6], faceColors[i % 6]);
+		Rasterize(backbuffer, xformedVerts[idxA], xformedVerts[idxB], xformedVerts[idxC], //faceColors[0], faceColors[0], faceColors[0]);
+			faceColors[(i) % 6], faceColors[(i + 1) % 6], faceColors[(i + 2) % 6]);
 	}
 }
 
@@ -830,7 +832,7 @@ static void
 RenderTestMesh(win32_backbuffer * backbuffer, Mesh * mesh)
 {
 	static const vec3 scale = { 1.0f, 1.0f, 1.0f };
-	static const vec3 position = { 0.0f, -25.0f, 0.0f };
+	static const vec3 position = { 0.0f, -15.0f, 0.0f };
 	static const vec4 axis(0.0f, 1.0f, 0.0f, 0.0f);
 	static const vec4 xAxis(-1.0f, 0.0f, 0.0f, 0.0f);
 
