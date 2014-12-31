@@ -237,18 +237,18 @@ int ReadColor(Color * color, const char * c)
 {
 	color->a = 1.0f; // Colors are given as RGB, no alpha channel.
 
-	const char * start = c;
-	const char * end;
+	char * cur = (char *)c;
 
-	while (*c && !(isdigit(*c))) ++c;
+	color->r = (float)strtod(cur, &cur);
+	color->g = (float)strtod(cur, &cur);
+	color->b = (float)strtod(cur, &cur);
 
-	c += ReadFloat32(&color->r, c);
-	c += ReadFloat32(&color->g, c);
-	c += ReadFloat32(&color->b, c);
+	return cur - c;
+}
 
-	end = c;
-
-	return end - start;
+Texture * LoadTexture(char * filename)
+{
+	return NULL;
 }
 
 // NOTE: Only loads the first material in a .mtl file.
@@ -294,11 +294,15 @@ void LoadMaterial(char * filename, Material * material)
 		}
 		else if (!strncmp(lineStart, "Ns", 2))
 		{
-			ReadFloat32(&material->specularIntensity, lineStart);
+			char * end;
+			material->specularIntensity = (float)strtod(lineStart + 2, &end);
+			assert(end != lineStart + 2);
 		}
 		else if (!strncmp(lineStart, "illum", 5))
 		{
-			ReadUint8(&material->illumType, lineStart);
+			char * end;
+			material->illumType = (u8)strtol(lineStart + 5, &end, 10);
+			assert(end != lineStart + 5);
 		}
 		else if (*lineStart == 'K')
 		{
@@ -307,9 +311,24 @@ void LoadMaterial(char * filename, Material * material)
 			else if (*lineStart == 'd') ReadColor(&material->diffuseColor, lineStart);
 			else if (*lineStart == 's') ReadColor(&material->specularColor, lineStart);
 		}
-		else if (!strncmp(lineStart, "map_", 4))
+		else if (!strncmp(lineStart, "map_K", 5))
 		{
 			// TODO:  Texture map.
+			lineStart += 5;
+			char * fnStart = (char *)lineStart + 2;
+			int fnLength = lineEnd - fnStart;
+			char filename[256];
+			memcpy(filename, fnStart, fnLength + 1);
+			filename[fnLength] = '\0';
+
+			if (*lineStart == 'a')
+			{
+				material->ambientTexture = LoadTexture(filename);
+			}
+			else if (*lineStart == 'd')
+			{
+				material->diffuseTexture = LoadTexture(filename);
+			}
 		}
 	}
 
@@ -817,6 +836,7 @@ RenderTestMesh(win32_backbuffer * backbuffer, Mesh * mesh)
 	static const vec3 scale = { 1.0f, 1.0f, 1.0f };
 	static const vec3 position = { 0.0f, -25.0f, 0.0f };
 	static const vec4 axis(0.0f, 1.0f, 0.0f, 0.0f);
+	static const vec4 xAxis(-1.0f, 0.0f, 0.0f, 0.0f);
 
 	static float angle = 0.0f;
 	quaternion rotation = RotationAroundAxis(angle, axis);
@@ -824,7 +844,7 @@ RenderTestMesh(win32_backbuffer * backbuffer, Mesh * mesh)
 	mat4x4 transform = MakeTransformMatrix(rotation, scale, position);
 
 	static const vec3 cameraPosition = { 0.0f, 0.0f, 250.0f }; 
-	quaternion cameraRotation = { 0.0f, 0.0f, 0.0f, 1.0f };
+	quaternion cameraRotation = RotationAroundAxis((float)M_PI * -1.25f, xAxis);
 
 	transform = MakeTransformMatrix(cameraRotation, scale, cameraPosition) * transform;
 
