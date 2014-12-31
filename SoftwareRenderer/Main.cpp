@@ -10,7 +10,9 @@
 #include "types.h"
 
 // For std::sort
-#include <algorithm> 
+#include <algorithm>
+// For loader
+#include <vector>
 
 // Disable warnings about C runtime functions
 // In a production setting this is a bad idea, but this is just proof-of-concept.
@@ -265,9 +267,9 @@ void LoadMaterial(char * filename, Material * material)
 	fileLength = fread(bytes, 1, fileLength, file);
 
 	// Clear material struct
-	memset(material, sizeof(Material), 0);
+	memset(material, 0, sizeof(Material));
 
-	const char * cur;
+	const char * cur = bytes;
 	const char * lineStart;
 	const char * lineEnd;
 
@@ -316,6 +318,63 @@ void LoadMaterial(char * filename, Material * material)
 
 void LoadMesh(char * filename, Mesh * mesh)
 {
+	FILE * file = fopen(filename, "r");
+	fseek(file, 0, SEEK_END);
+	u32 fileLength = ftell(file);  // This is a minimum, may overestimate length of text files.
+	fseek(file, 0, SEEK_SET);
+
+	char * bytes = (char *)calloc(1, fileLength);
+	fileLength = fread(bytes, 1, fileLength, file);
+
+	memset(mesh, 0, sizeof(Mesh));
+
+	std::vector<vec4> vertices;
+	std::vector<uint> indices;
+
+	const char * cur = bytes;
+	const char * lineStart;
+	const char * lineEnd;
+
+	while (ReadLine(&lineStart, &lineEnd, &cur))
+	{
+		if (*lineStart == 'v' && *(lineStart + 1) == ' ') 
+		{
+			// Vertex position
+			float x;
+			float y;
+			float z;
+			lineStart += ReadFloat32(&x, lineStart);
+			lineStart += ReadFloat32(&y, lineStart);
+			lineStart += ReadFloat32(&z, lineStart);
+
+			vertices.push_back(vec4(x, y, z, 1.0f));
+		}
+		else if (*lineStart == 'v' && *(lineStart + 1) == 't')
+		{
+			// Vertex uvw
+		}
+		else if (*lineStart == 'f')
+		{
+			// indices
+		}
+	}
+
+	mesh->vertexCount = vertices.size();
+	mesh->indexCount = indices.size();
+
+	// Allocate mesh data in a single block
+	u64 verticesSize = mesh->vertexCount * sizeof(vec4);
+	u64 indicesSize = mesh->indexCount * sizeof(uint);
+	u64 totalSize = verticesSize + indicesSize;
+	char * meshBytes = (char *)malloc(totalSize);
+
+	assert(meshBytes);
+
+	mesh->vertices = (vec4 *)meshBytes;
+	mesh->indices = (uint *)(meshBytes + verticesSize);
+
+	memcpy(mesh->vertices, &vertices[0], verticesSize);
+//	memcpy(mesh->indices, &indices[0], indicesSize);
 }
 
 static void 
@@ -817,6 +876,9 @@ WinMain(HINSTANCE hInstance,
 	u64 frameTargetMS = 1000 / 30;
 	u64 perfTicksPerMS = Win32TimerFrequency() / 1000;
 	u64 lastTick = Win32GetPerformanceTimer();
+
+	Mesh teapot;
+	LoadMesh("C:\\Users\\Bryan Taylor\\Desktop\\teapot\\teapot.obj", &teapot);
 
 	Mesh cube;
 	MakeCubeMesh(&cube);
