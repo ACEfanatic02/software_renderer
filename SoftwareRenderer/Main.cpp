@@ -316,6 +316,13 @@ void LoadMaterial(char * filename, Material * material)
 	free(bytes);
 }
 
+void FindNext(char c, const char * str, char ** out)
+{
+	char * cur = (char *)str;
+	while (*cur && *cur != c) ++cur;
+	*out = cur;
+}
+
 void LoadMesh(char * filename, Mesh * mesh)
 {
 	FILE * file = fopen(filename, "r");
@@ -323,8 +330,11 @@ void LoadMesh(char * filename, Mesh * mesh)
 	u32 fileLength = ftell(file);  // This is a minimum, may overestimate length of text files.
 	fseek(file, 0, SEEK_SET);
 
-	char * bytes = (char *)calloc(1, fileLength);
+	char * bytes = (char *)calloc(1, fileLength + 1);
 	fileLength = fread(bytes, 1, fileLength, file);
+	bytes[fileLength] = '\0';
+
+	fclose(file);
 
 	memset(mesh, 0, sizeof(Mesh));
 
@@ -343,9 +353,10 @@ void LoadMesh(char * filename, Mesh * mesh)
 			float x;
 			float y;
 			float z;
-			lineStart += ReadFloat32(&x, lineStart);
-			lineStart += ReadFloat32(&y, lineStart);
-			lineStart += ReadFloat32(&z, lineStart);
+			char * cur = (char *)lineStart + 1;
+			x = (float)strtod(cur, &cur);
+			y = (float)strtod(cur, &cur);
+			z = (float)strtod(cur, &cur);
 
 			vertices.push_back(vec4(x, y, z, 1.0f));
 		}
@@ -355,17 +366,56 @@ void LoadMesh(char * filename, Mesh * mesh)
 		}
 		else if (*lineStart == 'f')
 		{
-			// indices
+			// Face 
+			++lineStart;
+			char * lineCur = (char *)lineStart;
+
+			uint indexA = -1;
+			uint indexB = -1;
+			uint indexC = -1;
+			uint indexD = -1;
+
+			indexA = (uint)strtol(lineCur, &lineCur, 10);
+			FindNext(' ', lineCur, &lineCur);
+			assert(lineCur < lineEnd - 1);
+			indexB = (uint)strtol(lineCur, &lineCur, 10);
+			FindNext(' ', lineCur, &lineCur);
+			assert(lineCur < lineEnd - 1);
+			indexC = (uint)strtol(lineCur, &lineCur, 10);
+			FindNext(' ', lineCur, &lineCur);
+
+			char * last;
+			indexD = (uint)strtol(lineCur, &last, 10);
+			if (last != lineCur && last <= lineEnd)
+			{
+				// Quad
+				indices.push_back(indexA - 1);
+				indices.push_back(indexB - 1);
+				indices.push_back(indexC - 1);
+				
+				indices.push_back(indexA - 1);
+				indices.push_back(indexD - 1);
+				indices.push_back(indexC - 1);
+			}
+			else
+			{
+				// Triangle
+				indices.push_back(indexA - 1);
+				indices.push_back(indexB - 1);
+				indices.push_back(indexC - 1);
+			}
 		}
 	}
+
+	free(bytes);
 
 	mesh->vertexCount = vertices.size();
 	mesh->indexCount = indices.size();
 
 	// Allocate mesh data in a single block
-	u64 verticesSize = mesh->vertexCount * sizeof(vec4);
-	u64 indicesSize = mesh->indexCount * sizeof(uint);
-	u64 totalSize = verticesSize + indicesSize;
+	u32 verticesSize = mesh->vertexCount * sizeof(vec4);
+	u32 indicesSize = mesh->indexCount * sizeof(uint);
+	u32 totalSize = verticesSize + indicesSize;
 	char * meshBytes = (char *)malloc(totalSize);
 
 	assert(meshBytes);
@@ -374,7 +424,7 @@ void LoadMesh(char * filename, Mesh * mesh)
 	mesh->indices = (uint *)(meshBytes + verticesSize);
 
 	memcpy(mesh->vertices, &vertices[0], verticesSize);
-//	memcpy(mesh->indices, &indices[0], indicesSize);
+	memcpy(mesh->indices, &indices[0], indicesSize);
 }
 
 static void 
@@ -765,15 +815,15 @@ static void
 RenderTestMesh(win32_backbuffer * backbuffer, Mesh * mesh)
 {
 	static const vec3 scale = { 1.0f, 1.0f, 1.0f };
-	static const vec3 position = { 0.0f, 0.0f, 0.0f };
-	static const vec4 axis(0.0f, 1.0f, 1.0f, 0.0f);
+	static const vec3 position = { 0.0f, -25.0f, 0.0f };
+	static const vec4 axis(0.0f, 1.0f, 0.0f, 0.0f);
 
 	static float angle = 0.0f;
 	quaternion rotation = RotationAroundAxis(angle, axis);
-	angle += 0.1f;
+	angle += 0.01f;
 	mat4x4 transform = MakeTransformMatrix(rotation, scale, position);
 
-	static const vec3 cameraPosition = { 0.0f, 0.0f, 15.0f }; 
+	static const vec3 cameraPosition = { 0.0f, 0.0f, 250.0f }; 
 	quaternion cameraRotation = { 0.0f, 0.0f, 0.0f, 1.0f };
 
 	transform = MakeTransformMatrix(cameraRotation, scale, cameraPosition) * transform;
@@ -879,6 +929,8 @@ WinMain(HINSTANCE hInstance,
 
 	Mesh teapot;
 	LoadMesh("C:\\Users\\Bryan Taylor\\Desktop\\teapot\\teapot.obj", &teapot);
+//	LoadMesh("C:\\Users\\Bryan Taylor\\Desktop\\test.obj", &teapot);
+	
 
 	Mesh cube;
 	MakeCubeMesh(&cube);
@@ -900,7 +952,7 @@ WinMain(HINSTANCE hInstance,
 		int height = clientRect.bottom - clientRect.top;
 		
 //		RenderTest(&backbuffer);
-		RenderTestMesh(&backbuffer, &cube);
+		RenderTestMesh(&backbuffer, &teapot);
 
 		Win32RedrawWindow(window, x, y, width, height, &backbuffer);
 		Win32ClearBackbuffer(&backbuffer, RGBA32(0, 0, 0, 0));
