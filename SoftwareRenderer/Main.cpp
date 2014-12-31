@@ -47,7 +47,19 @@ struct vec4
 	float z;
 	float w;
 
-//	vec4(float _x, float _y, float _z, float _w);
+
+	vec4() :
+		x(0),
+		y(0),
+		z(0),
+		w(0)
+	{}
+	vec4(float _x, float _y, float _z, float _w) :
+		x(_x),
+		y(_y),
+		z(_z),
+		w(_w)
+	{}
 };
 
 struct mat4x4
@@ -68,12 +80,12 @@ struct quaternion
 
 vec4 operator/(vec4 v, float f)
 {
-	vec4 rv = {
+	vec4 rv = vec4(
 		v.x / f,
 		v.y / f,
 		v.z / f, 
-		v.w / f,
-	};
+		v.w / f
+	);
 
 	return rv;
 }
@@ -343,7 +355,7 @@ void TestMatrixMultiply()
 	ident.c2 = 1.0f;
 	ident.d3 = 1.0f;
 
-	vec4 testVec = { -100.0f, -100.0f, 100.0f, 1.0f };
+	vec4 testVec( -100.0f, -100.0f, 100.0f, 1.0f );
 
 	OutputDebugStringW(L"Original:\n");
 
@@ -370,7 +382,7 @@ void TestMatrixMultiply()
 
 	OutputDebugStringW(L"\n90 degree quaternion rotation around Y:\n");
 
-	vec4 yAxis = { 0.0f, 1.0f, 0.0f, 0.0f };
+	vec4 yAxis = vec4( 0.0f, 1.0f, 0.0f, 0.0f );
 	quaternion quat = RotationAroundAxis((float)M_PI_2, yAxis);
 //	DEBUGPrintVec4(quat * testVec);
 }
@@ -828,7 +840,7 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Co
 	float a20 = (v2.y - v0.y) * stepSize;
 	float b20 = (v0.x - v2.x) * stepSize;
 
-	vec4 p = { minX, minY, 0.0f, 1.0f };
+	vec4 p( minX, minY, 0.0f, 1.0f );
 
 	// Fill-rule bias
 	float bias0 = IsTopLeft(v1, v2) ? 0.0f : -1.0f;
@@ -949,55 +961,167 @@ static void RenderMesh(win32_backbuffer * backbuffer, const vec4 * vertices, int
 
 static const int meshVertexCount = 36;
 static const vec4 meshVerts[meshVertexCount] = {
-	{ -1.0f, -1.0f, -1.0f, 1.0f },
-	{ -1.0f, -1.0f,  1.0f, 1.0f },
-	{ -1.0f,  1.0f,  1.0f, 1.0f },
-
-	{  1.0f,  1.0f, -1.0f, 1.0f },
-	{ -1.0f, -1.0f, -1.0f, 1.0f },
-	{ -1.0f,  1.0f, -1.0f, 1.0f },
-
-	{  1.0f, -1.0f,  1.0f, 1.0f },
-	{ -1.0f, -1.0f, -1.0f, 1.0f },
-	{  1.0f, -1.0f, -1.0f, 1.0f },
-
-	{  1.0f,  1.0f, -1.0f, 1.0f },
-	{  1.0f, -1.0f, -1.0f, 1.0f },
-	{ -1.0f, -1.0f, -1.0f, 1.0f },
-
-	{ -1.0f, -1.0f, -1.0f, 1.0f },
-	{ -1.0f,  1.0f,  1.0f, 1.0f },
-	{ -1.0f,  1.0f, -1.0f, 1.0f },
-
-	{  1.0f, -1.0f,  1.0f, 1.0f },
-	{ -1.0f, -1.0f,  1.0f, 1.0f },
-	{ -1.0f, -1.0f, -1.0f, 1.0f },
-
-	{ -1.0f,  1.0f,  1.0f, 1.0f },
-	{ -1.0f, -1.0f,  1.0f, 1.0f },
-	{  1.0f, -1.0f,  1.0f, 1.0f },
-
-	{  1.0f,  1.0f,  1.0f, 1.0f },
-	{  1.0f, -1.0f, -1.0f, 1.0f },
-	{  1.0f,  1.0f, -1.0f, 1.0f },
-		
-	{  1.0f, -1.0f, -1.0f, 1.0f },
-	{  1.0f,  1.0f,  1.0f, 1.0f },
-	{  1.0f, -1.0f,  1.0f, 1.0f },
-		
-	{  1.0f,  1.0f,  1.0f, 1.0f },
-	{  1.0f,  1.0f, -1.0f, 1.0f },
-	{ -1.0f,  1.0f, -1.0f, 1.0f },
-
-	{  1.0f,  1.0f,  1.0f, 1.0f },
-	{ -1.0f,  1.0f, -1.0f, 1.0f },
-	{ -1.0f,  1.0f,  1.0f, 1.0f },
-
-	{  1.0f,  1.0f,  1.0f, 1.0f },
-	{ -1.0f,  1.0f,  1.0f, 1.0f },
-	{  1.0f, -1.0f,  1.0f, 1.0f },
+	vec4( -1.0f, -1.0f, -1.0f, 1.0f ),
+	vec4( -1.0f, -1.0f,  1.0f, 1.0f ),
+	vec4( -1.0f,  1.0f,  1.0f, 1.0f ),
+//
+	vec4(  1.0f,  1.0f, -1.0f, 1.0f ),
+	vec4( -1.0f, -1.0f, -1.0f, 1.0f ),
+	vec4( -1.0f,  1.0f, -1.0f, 1.0f ),
+//
+	vec4(  1.0f, -1.0f,  1.0f, 1.0f ),
+	vec4( -1.0f, -1.0f, -1.0f, 1.0f ),
+	vec4(  1.0f, -1.0f, -1.0f, 1.0f ),
+//
+	vec4(  1.0f,  1.0f, -1.0f, 1.0f ),
+	vec4(  1.0f, -1.0f, -1.0f, 1.0f ),
+	vec4( -1.0f, -1.0f, -1.0f, 1.0f ),
+//
+	vec4( -1.0f, -1.0f, -1.0f, 1.0f ),
+	vec4( -1.0f,  1.0f,  1.0f, 1.0f ),
+	vec4( -1.0f,  1.0f, -1.0f, 1.0f ),
+//
+	vec4(  1.0f, -1.0f,  1.0f, 1.0f ),
+	vec4( -1.0f, -1.0f,  1.0f, 1.0f ),
+	vec4( -1.0f, -1.0f, -1.0f, 1.0f ),
+//
+	vec4( -1.0f,  1.0f,  1.0f, 1.0f ),
+	vec4( -1.0f, -1.0f,  1.0f, 1.0f ),
+	vec4(  1.0f, -1.0f,  1.0f, 1.0f ),
+//
+	vec4(  1.0f,  1.0f,  1.0f, 1.0f ),
+	vec4(  1.0f, -1.0f, -1.0f, 1.0f ),
+	vec4(  1.0f,  1.0f, -1.0f, 1.0f ),
+//		
+	vec4(  1.0f, -1.0f, -1.0f, 1.0f ),
+	vec4(  1.0f,  1.0f,  1.0f, 1.0f ),
+	vec4(  1.0f, -1.0f,  1.0f, 1.0f ),
+//		
+	vec4(  1.0f,  1.0f,  1.0f, 1.0f ),
+	vec4(  1.0f,  1.0f, -1.0f, 1.0f ),
+	vec4( -1.0f,  1.0f, -1.0f, 1.0f ),
+//
+	vec4(  1.0f,  1.0f,  1.0f, 1.0f ),
+	vec4( -1.0f,  1.0f, -1.0f, 1.0f ),
+	vec4( -1.0f,  1.0f,  1.0f, 1.0f ),
+//
+	vec4(  1.0f,  1.0f,  1.0f, 1.0f ),
+	vec4( -1.0f,  1.0f,  1.0f, 1.0f ),
+	vec4(  1.0f, -1.0f,  1.0f, 1.0f ),
 };
 
+static void MakeCubeMesh(Mesh * mesh)
+{
+	mesh->vertexCount = 8;
+	mesh->vertices = (vec4 *)calloc(sizeof(vec4), mesh->vertexCount);
+	mesh->vertices[0] = vec4( 1.0f,  1.0f,  1.0f, 1.0f);
+	mesh->vertices[1] = vec4(-1.0f,  1.0f,  1.0f, 1.0f);
+	mesh->vertices[2] = vec4(-1.0f, -1.0f,  1.0f, 1.0f);
+	mesh->vertices[3] = vec4(-1.0f, -1.0f, -1.0f, 1.0f);
+	mesh->vertices[4] = vec4( 1.0f, -1.0f, -1.0f, 1.0f);
+	mesh->vertices[5] = vec4( 1.0f,  1.0f, -1.0f, 1.0f);
+	mesh->vertices[6] = vec4(-1.0f,  1.0f, -1.0f, 1.0f);
+	mesh->vertices[7] = vec4( 1.0f, -1.0f,  1.0f, 1.0f);
+
+	mesh->indexCount = 6*2*3;  // Six sides, two triangles per side, 3 vertices each.
+	mesh->indices = (uint *)calloc(sizeof(uint), mesh->indexCount);
+	mesh->indices[0] = 3;
+	mesh->indices[1] = 2;
+	mesh->indices[2] = 1;
+
+	mesh->indices[3] = 5;
+	mesh->indices[4] = 3;
+	mesh->indices[5] = 6;
+
+	mesh->indices[6] = 7;
+	mesh->indices[7] = 3;
+	mesh->indices[8] = 4;
+
+	mesh->indices[9]  = 5;
+	mesh->indices[10] = 4;
+	mesh->indices[11] = 3;
+
+	mesh->indices[12] = 3;
+	mesh->indices[13] = 1;
+	mesh->indices[14] = 6;
+
+	mesh->indices[15] = 7;
+	mesh->indices[16] = 2;
+	mesh->indices[17] = 3;
+
+	mesh->indices[18] = 1;
+	mesh->indices[19] = 2;
+	mesh->indices[20] = 7;
+
+	mesh->indices[21] = 0;
+	mesh->indices[22] = 4;
+	mesh->indices[23] = 5;
+
+	mesh->indices[24] = 4;
+	mesh->indices[25] = 0;
+	mesh->indices[26] = 7;
+
+	mesh->indices[27] = 0;
+	mesh->indices[28] = 5;
+	mesh->indices[29] = 6;
+
+	mesh->indices[30] = 0;
+	mesh->indices[31] = 6;
+	mesh->indices[32] = 1;
+
+	mesh->indices[33] = 0;
+	mesh->indices[34] = 1;
+	mesh->indices[35] = 7;
+}
+
+static void 
+RenderMesh(win32_backbuffer * backbuffer, Mesh * mesh, mat4x4 transform)
+{
+	float r = (gScreenWidth / 2.0f);
+	float l = -(gScreenWidth / 2.0f);
+	float t = -(gScreenHeight / 2.0f);
+	float b = (gScreenHeight / 2.0f);
+	float n = -1000.0f;
+	float f = 1000.0f;
+	static const mat4x4 frustumMatrix = FrustumMatrix(r, l, t, b, n, f);
+
+	assert(mesh->vertexCount > 0);
+	vec4 * xformedVerts = (vec4 *)malloc(sizeof(vec4) * mesh->vertexCount);
+
+	for (u32 i = 0; i < mesh->vertexCount; ++i)
+	{
+		xformedVerts[i] = frustumMatrix * transform * mesh->vertices[i];
+	}
+
+	assert(mesh->indexCount % 3 == 0);
+	for (u32 i = 0; i < mesh->indexCount; i += 3)
+	{
+		uint idxA = mesh->indices[i];
+		uint idxB = mesh->indices[i + 1];
+		uint idxC = mesh->indices[i + 2];
+		Rasterize(backbuffer, xformedVerts[idxA], xformedVerts[idxB], xformedVerts[idxC], faceColors[i % 6], faceColors[i % 6], faceColors[i % 6]);
+	}
+}
+
+static void 
+RenderTestMesh(win32_backbuffer * backbuffer, Mesh * mesh)
+{
+	static const vec3 scale = { 1.0f, 1.0f, 1.0f };
+	static const vec3 position = { 0.0f, 0.0f, 0.0f };
+	static const vec4 axis(0.0f, 1.0f, 1.0f, 0.0f);
+
+	static float angle = 0.0f;
+	quaternion rotation = RotationAroundAxis(angle, axis);
+	angle += 0.1f;
+	mat4x4 transform = MakeTransformMatrix(rotation, scale, position);
+
+	static const vec3 cameraPosition = { 0.0f, 0.0f, 15.0f }; 
+	quaternion cameraRotation = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+	transform = MakeTransformMatrix(cameraRotation, scale, cameraPosition) * transform;
+
+	RenderMesh(backbuffer, mesh, transform);
+}
 
 static void RenderTest(win32_backbuffer * backbuffer)
 {
@@ -1005,7 +1129,7 @@ static void RenderTest(win32_backbuffer * backbuffer)
 	static const vec3 position = { 0.0f, 0.0f, 0.0f };
 
 	static float angle = 0.0f;
-	vec4 axis = { 1.0f, 0.5f, 0.0f, 0.0f };
+	vec4 axis = vec4( 1.0f, 0.5f, 0.0f, 0.0f );
 	quaternion rotation = RotationAroundAxis(angle, axis);
 	mat4x4 transform = MakeTransformMatrix(rotation, scale, position);
 	angle += 0.1f;
@@ -1016,7 +1140,7 @@ static void RenderTest(win32_backbuffer * backbuffer)
 	static const mat4x4 transform2 = MakeTransformMatrix(rot2, scale2, position2);
 
 	static float cameraAngle = 0.0f;
-	vec4 upAxis = { 0.0f, -1.0f, 0.0f, 0.0f };
+	vec4 upAxis = vec4( 0.0f, -1.0f, 0.0f, 0.0f );
 	quaternion cameraRotation = RotationAroundAxis(cameraAngle, upAxis);
 	vec3 cameraPosition = { 0.0f, 0.0f, 15.0f };
 	mat4x4 cameraTransform = MakeTransformMatrix(cameraRotation, scale, cameraPosition);
@@ -1095,6 +1219,9 @@ WinMain(HINSTANCE hInstance,
 	u64 perfTicksPerMS = Win32TimerFrequency() / 1000;
 	u64 lastTick = Win32GetPerformanceTimer();
 
+	Mesh cube;
+	MakeCubeMesh(&cube);
+
 	MSG msg;
 	while (gRunning)
 	{
@@ -1111,7 +1238,8 @@ WinMain(HINSTANCE hInstance,
 		int width = clientRect.right - clientRect.left;
 		int height = clientRect.bottom - clientRect.top;
 		
-		RenderTest(&backbuffer);
+//		RenderTest(&backbuffer);
+		RenderTestMesh(&backbuffer, &cube);
 
 		Win32RedrawWindow(window, x, y, width, height, &backbuffer);
 		Win32ClearBackbuffer(&backbuffer, RGBA32(0, 0, 0, 0));
