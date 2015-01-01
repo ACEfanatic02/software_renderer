@@ -620,8 +620,8 @@ Orient2D(const vec4& a, const vec4& b, const vec4& c)
 
 static bool IsTopLeft(const vec4& a, const vec4& b)
 {
-	return (abs(a.y - b.y) <= 0.5f) // Top edge
-		|| (b.x > a.x);             // Left edge
+	return (abs(a.y - b.y) < 0.5f) // Top edge
+		|| (b.x > a.x);            // Left edge
 }
 
 static void
@@ -666,14 +666,14 @@ Rasterize(win32_backbuffer * backbuffer, Material * material, vec4 v0, vec4 v1, 
 	vec4 p( minX, minY, 0.0f, 1.0f );
 
 	// Fill-rule bias
-	float bias0 = IsTopLeft(v1, v2) ? 0.0f : -1.0f;
-	float bias1 = IsTopLeft(v2, v0) ? 0.0f : -1.0f;
-	float bias2 = IsTopLeft(v0, v1) ? 0.0f : -1.0f;
+	float bias0 = IsTopLeft(v1, v2) ? 0.0f : -1.0f * stepSize;
+	float bias1 = IsTopLeft(v2, v0) ? 0.0f : -1.0f * stepSize;
+	float bias2 = IsTopLeft(v0, v1) ? 0.0f : -1.0f * stepSize;
 	
 	// Calculate barycentric coordinates for first pixel.
-	float w0_row = Orient2D(v1, v2, p) + bias0;
-	float w1_row = Orient2D(v2, v0, p) + bias1;
-	float w2_row = Orient2D(v0, v1, p) + bias2;
+	float w0_row = Orient2D(v1, v2, p) - bias0;
+	float w1_row = Orient2D(v2, v0, p) - bias1;
+	float w2_row = Orient2D(v0, v1, p) - bias2;
 
 	// Backface culling.
 	if (w0_row + w1_row + w2_row < 0.0f) return;
@@ -923,8 +923,8 @@ RenderMesh(win32_backbuffer * backbuffer, Mesh * mesh, mat4x4 transform)
 		uint idxC = mesh->indices[i + 4];
 		uint uvwC = mesh->indices[i + 5];
 		Rasterize(backbuffer, mesh->material,
-			xformedVerts[idxA], xformedVerts[idxB], xformedVerts[idxC], faceColors[0], faceColors[0], faceColors[0],
-	//		faceColors[(i) % 6], faceColors[(i + 1) % 6], faceColors[(i + 2) % 6],
+			xformedVerts[idxA], xformedVerts[idxB], xformedVerts[idxC], 
+			faceColors[0], faceColors[0], faceColors[0],
 			mesh->uvws[uvwA], mesh->uvws[uvwB], mesh->uvws[uvwC]);
 	}
 	free(xformedVerts);
