@@ -358,6 +358,7 @@ void LoadMesh(char * filename, Mesh * mesh)
 	memset(mesh, 0, sizeof(Mesh));
 
 	std::vector<vec4> vertices;
+	std::vector<vec3> uvws;
 	std::vector<uint> indices;
 
 	const char * cur = bytes;
@@ -382,6 +383,19 @@ void LoadMesh(char * filename, Mesh * mesh)
 		else if (*lineStart == 'v' && *(lineStart + 1) == 't')
 		{
 			// Vertex uvw
+			float u;
+			float v;
+			float w;
+
+			char * cur = (char *) lineStart + 2;
+			u = (float)strtod(cur, &cur);
+			v = (float)strtod(cur, &cur);
+			w = (float)strtod(cur, &cur);
+
+			assert(cur <= lineEnd);
+
+			vec3 uvw = { u, v, w }; 
+			uvws.push_back(uvw);
 		}
 		else if (*lineStart == 'f')
 		{
@@ -390,38 +404,62 @@ void LoadMesh(char * filename, Mesh * mesh)
 			char * lineCur = (char *)lineStart;
 
 			uint indexA = -1;
+			uint uvIndexA = -1;
+
 			uint indexB = -1;
+			uint uvIndexB = -1;
+
 			uint indexC = -1;
+			uint uvIndexC = -1;
+			
 			uint indexD = -1;
+			uint uvIndexD = -1;
 
 			indexA = (uint)strtol(lineCur, &lineCur, 10);
+			++lineCur;
+			uvIndexA = (uint)strtol(lineCur, &lineCur, 10);
 			FindNext(' ', lineCur, &lineCur);
 			assert(lineCur < lineEnd - 1);
 			indexB = (uint)strtol(lineCur, &lineCur, 10);
+			++lineCur;
+			uvIndexB = (uint)strtol(lineCur, &lineCur, 10);
 			FindNext(' ', lineCur, &lineCur);
 			assert(lineCur < lineEnd - 1);
 			indexC = (uint)strtol(lineCur, &lineCur, 10);
+			++lineCur;
+			uvIndexC = (uint)strtol(lineCur, &lineCur, 10);
 			FindNext(' ', lineCur, &lineCur);
 
 			char * last;
 			indexD = (uint)strtol(lineCur, &last, 10);
+			++last;
+			uvIndexD = (uint)strtol(last, &last, 10);
 			if (last != lineCur && last <= lineEnd)
 			{
 				// Quad
 				indices.push_back(indexA - 1);
+				indices.push_back(uvIndexA - 1);
 				indices.push_back(indexB - 1);
+				indices.push_back(uvIndexB - 1);
 				indices.push_back(indexC - 1);
+				indices.push_back(uvIndexC - 1);
 				
 				indices.push_back(indexA - 1);
+				indices.push_back(uvIndexA - 1);
 				indices.push_back(indexC - 1);
+				indices.push_back(uvIndexC - 1);
 				indices.push_back(indexD - 1);
+				indices.push_back(uvIndexD - 1);
 			}
 			else
 			{
 				// Triangle
 				indices.push_back(indexA - 1);
+				indices.push_back(uvIndexA - 1);
 				indices.push_back(indexB - 1);
+				indices.push_back(uvIndexB - 1);
 				indices.push_back(indexC - 1);
+				indices.push_back(uvIndexC - 1);
 			}
 		}
 	}
@@ -429,20 +467,24 @@ void LoadMesh(char * filename, Mesh * mesh)
 	free(bytes);
 
 	mesh->vertexCount = vertices.size();
+	mesh->uvwCount = uvws.size();
 	mesh->indexCount = indices.size();
 
 	// Allocate mesh data in a single block
 	u32 verticesSize = mesh->vertexCount * sizeof(vec4);
+	u32 uvwsSize = mesh->uvwCount * sizeof(vec3);
 	u32 indicesSize = mesh->indexCount * sizeof(uint);
-	u32 totalSize = verticesSize + indicesSize;
+	u32 totalSize = verticesSize + uvwsSize + indicesSize;
 	char * meshBytes = (char *)malloc(totalSize);
 
 	assert(meshBytes);
 
 	mesh->vertices = (vec4 *)meshBytes;
-	mesh->indices = (uint *)(meshBytes + verticesSize);
+	mesh->uvws = (vec3 *)(meshBytes + verticesSize); 
+	mesh->indices = (uint *)(meshBytes + verticesSize + uvwsSize);
 
 	memcpy(mesh->vertices, &vertices[0], verticesSize);
+	memcpy(mesh->uvws, &uvws[0], uvwsSize);
 	memcpy(mesh->indices, &indices[0], indicesSize);
 }
 
@@ -461,6 +503,30 @@ RenderTestGradient(win32_backbuffer * backbuffer)
 			pixels[y * width + x] = RGBA32(x, y, x-y, 0xff);
 		}
 	}
+}
+
+static Color
+SampleTexture2D(Texture * texture, float u, float v)
+{
+	int width = texture->width;
+	int height = texture->height;
+	int x0 = (int)(u * width + 0.5f);
+	int x1 = (int)(u * width - 0.5f);
+	int y0 = (int)(v * height + 0.5f);
+	int y1 = (int)(v * height - 0.5f);
+
+	u32 * pixels = (u32 *)texture->data;
+
+	Color c00 = Color(pixels[y0 * width + x0]);
+	Color c10 = Color(pixels[y0 * width + x1]);
+	Color c01 = Color(pixels[y1 * width + x0]);
+	Color c11 = Color(pixels[y1 * width + x1]);
+
+	float red = (c00.r + c10.r + c01.r + c11.r) / 4.0f;
+	float blue = (c00.b + c10.b + c01.b + c11.b) / 4.0f;
+	float green = (c00.g + c10.g + c01.g + c11.g) / 4.0f;
+
+	return Color(red, blue, green, 1.0f);
 }
 
 // Rasterizer.
@@ -817,15 +883,19 @@ RenderMesh(win32_backbuffer * backbuffer, Mesh * mesh, mat4x4 transform)
 		xformedVerts[i] = frustumMatrix * transform * mesh->vertices[i];
 	}
 
-	assert(mesh->indexCount % 3 == 0);
-	for (u32 i = 0; i < mesh->indexCount; i += 3)
+	assert(mesh->indexCount % 6 == 0);
+	for (u32 i = 0; i < mesh->indexCount; i += 6)
 	{
 		uint idxA = mesh->indices[i];
-		uint idxB = mesh->indices[i + 1];
-		uint idxC = mesh->indices[i + 2];
+		uint uvwA = mesh->indices[i + 1];
+		uint idxB = mesh->indices[i + 2];
+		uint uvwB = mesh->indices[i + 3];
+		uint idxC = mesh->indices[i + 4];
+		uint uvwC = mesh->indices[i + 5];
 		Rasterize(backbuffer, xformedVerts[idxA], xformedVerts[idxB], xformedVerts[idxC], //faceColors[0], faceColors[0], faceColors[0]);
 			faceColors[(i) % 6], faceColors[(i + 1) % 6], faceColors[(i + 2) % 6]);
 	}
+	free(xformedVerts);
 }
 
 static void 
