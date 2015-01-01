@@ -7,6 +7,9 @@
 #include <cstdio>
 #include <cfloat>
 
+#define STBI_ONLY_PNG
+#include "stb/stb_image.h"
+
 #include "types.h"
 
 // For std::sort
@@ -248,7 +251,40 @@ int ReadColor(Color * color, const char * c)
 
 Texture * LoadTexture(char * filename)
 {
-	return NULL;
+	FILE * file = fopen(filename, "rb");
+	if (file == NULL) 
+	{
+		return NULL;
+	}
+	int x;
+	int y;
+	int comp; // Force RGBA
+	u8 * data = stbi_load_from_file(file, &x, &y, &comp, 4);
+
+	if (data == NULL) {
+		assert(0);
+		return NULL;
+	}
+
+	Texture * texture = (Texture *)malloc(sizeof(Texture));
+	texture->width = x;
+	texture->height = y;
+	u32 * texData = (u32 *)malloc(4 * x * y);
+
+	// Loaded image is RGBA, we need it in ARGB to match our convention.
+	#define RGBA_TO_ARGB(p) ((p & 0xff) << 24) | ((p & 0xffffff00) >> 8)
+	u32 * pixels = (u32 *)data;
+	for (int i = 0; i < x * y; ++i)
+	{
+		texData[i] = pixels[i];//RGBA_TO_ARGB(pixels[i]);
+	}
+	#undef RGBA_TO_ARGB
+
+	texture->data = (char *)texData;
+
+	stbi_image_free(data);
+
+	return texture;
 }
 
 // NOTE: Only loads the first material in a .mtl file.
@@ -263,8 +299,9 @@ void LoadMaterial(char * filename, Material * material)
 	u32 fileLength = ftell(file);  // This is a minimum, may overestimate length of text files.
 	fseek(file, 0, SEEK_SET);
 
-	char * bytes = (char *)calloc(1, fileLength);
+	char * bytes = (char *)calloc(1, fileLength + 1);
 	fileLength = fread(bytes, 1, fileLength, file);
+	bytes[fileLength] = '\0';
 
 	// Clear material struct
 	memset(material, 0, sizeof(Material));
@@ -317,9 +354,8 @@ void LoadMaterial(char * filename, Material * material)
 			lineStart += 5;
 			char * fnStart = (char *)lineStart + 2;
 			int fnLength = lineEnd - fnStart;
-			char filename[256];
-			memcpy(filename, fnStart, fnLength + 1);
-			filename[fnLength] = '\0';
+			char filename[256] = { 0 };
+			memcpy(filename, fnStart, fnLength);
 
 			if (*lineStart == 'a')
 			{
@@ -510,23 +546,12 @@ SampleTexture2D(Texture * texture, float u, float v)
 {
 	int width = texture->width;
 	int height = texture->height;
-	int x0 = (int)(u * width + 0.5f);
-	int x1 = (int)(u * width - 0.5f);
-	int y0 = (int)(v * height + 0.5f);
-	int y1 = (int)(v * height - 0.5f);
+	int x = (int)(u * width);
+	int y = (int)(v * height);
 
 	u32 * pixels = (u32 *)texture->data;
 
-	Color c00 = Color(pixels[y0 * width + x0]);
-	Color c10 = Color(pixels[y0 * width + x1]);
-	Color c01 = Color(pixels[y1 * width + x0]);
-	Color c11 = Color(pixels[y1 * width + x1]);
-
-	float red = (c00.r + c10.r + c01.r + c11.r) / 4.0f;
-	float blue = (c00.b + c10.b + c01.b + c11.b) / 4.0f;
-	float green = (c00.g + c10.g + c01.g + c11.g) / 4.0f;
-
-	return Color(red, blue, green, 1.0f);
+	return Color(pixels[y * width + x]);
 }
 
 // Rasterizer.
@@ -555,7 +580,7 @@ SetPixel(win32_backbuffer * backbuffer, int x, int y, u32 color, float depth)
 }
 
 static void
-SetPixel(win32_backbuffer * backbuffer, vec4 p, Color c0, Color c1, Color c2, float d0, float d1, float d2, float l0, float l1, float l2)
+SetPixel(win32_backbuffer * backbuffer, Material * material, vec4 p, Color c0, Color c1, Color c2, vec3 uv0, vec3 uv1, vec3 uv2, float d0, float d1, float d2, float l0, float l1, float l2)
 {
 	int width = backbuffer->bmpInfo.bmiHeader.biWidth;
 	int height = backbuffer->bmpInfo.bmiHeader.biHeight;
@@ -576,6 +601,11 @@ SetPixel(win32_backbuffer * backbuffer, vec4 p, Color c0, Color c1, Color c2, fl
 		float a = c0.a + l1*(c1.a - c0.a) + l2*(c2.a - c0.a);
 		Color color(r, g, b, a);
 
+		float u = uv0.x + l1*(uv1.x - uv0.x) + l2*(uv2.x - uv0.x);
+		float v = uv0.y + l1*(uv1.y - uv0.y) + l2*(uv2.y - uv0.y);
+
+		color *= SampleTexture2D(material->diffuseTexture, u, v);
+
 		pixels[idx] = color.rgba();
 		backbuffer->depthBuffer[idx] = depth;
 	}
@@ -595,7 +625,7 @@ static bool IsTopLeft(const vec4& a, const vec4& b)
 }
 
 static void
-Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Color c1, Color c2)
+Rasterize(win32_backbuffer * backbuffer, Material * material, vec4 v0, vec4 v1, vec4 v2, Color c0, Color c1, Color c2, vec3 uv0, vec3 uv1, vec3 uv2)
 {
 	float screenHalfWidth = gScreenWidth / 2.0f;
 	float screenHalfHeight = gScreenHeight / 2.0f;
@@ -685,7 +715,7 @@ Rasterize(win32_backbuffer * backbuffer, vec4 v0, vec4 v1, vec4 v2, Color c0, Co
 
 				SetPixel(backbuffer, (int)(p.x + 0.5f), (int)(p.y + 0.5f), color.rgba(), depth);
 #else
-				SetPixel(backbuffer, p, c0, c1, c2, v0.w, v1.w, v2.w, l0, l1, l2);
+				SetPixel(backbuffer, material, p, c0, c1, c2, uv0, uv1, uv2, v0.w, v1.w, v2.w, l0, l1, l2);
 #endif
 			}
 
@@ -744,8 +774,8 @@ static void RenderMesh(win32_backbuffer * backbuffer, const vec4 * vertices, int
 
 	for (int i = 0; i < vertexCount / 3; ++i)
 	{ 
-		Rasterize(backbuffer, tris[i].v0, tris[i].v1, tris[i].v2, 
-			faceColors[i % 6], faceColors[i % 6], faceColors[i % 6]);
+//		Rasterize(backbuffer, tris[i].v0, tris[i].v1, tris[i].v2, 
+//			faceColors[i % 6], faceColors[i % 6], faceColors[i % 6]);
 	}
 }
 
@@ -892,8 +922,10 @@ RenderMesh(win32_backbuffer * backbuffer, Mesh * mesh, mat4x4 transform)
 		uint uvwB = mesh->indices[i + 3];
 		uint idxC = mesh->indices[i + 4];
 		uint uvwC = mesh->indices[i + 5];
-		Rasterize(backbuffer, xformedVerts[idxA], xformedVerts[idxB], xformedVerts[idxC], //faceColors[0], faceColors[0], faceColors[0]);
-			faceColors[(i) % 6], faceColors[(i + 1) % 6], faceColors[(i + 2) % 6]);
+		Rasterize(backbuffer, mesh->material,
+			xformedVerts[idxA], xformedVerts[idxB], xformedVerts[idxC], faceColors[0], faceColors[0], faceColors[0],
+	//		faceColors[(i) % 6], faceColors[(i + 1) % 6], faceColors[(i + 2) % 6],
+			mesh->uvws[uvwA], mesh->uvws[uvwB], mesh->uvws[uvwC]);
 	}
 	free(xformedVerts);
 }
@@ -1002,6 +1034,8 @@ WinMain(HINSTANCE hInstance,
 								 NULL, NULL, hInstance, NULL);
 	assert(window);
 
+	SetCurrentDirectory(TEXT("..\\Resources\\teapot\\"));
+
 	ShowWindow(window, nCmdShow);
 
 	win32_backbuffer backbuffer;
@@ -1016,9 +1050,10 @@ WinMain(HINSTANCE hInstance,
 	u64 lastTick = Win32GetPerformanceTimer();
 
 	Mesh teapot;
-	LoadMesh("C:\\Users\\Bryan Taylor\\Desktop\\teapot\\teapot.obj", &teapot);
-//	LoadMesh("C:\\Users\\Bryan Taylor\\Desktop\\test.obj", &teapot);
-	
+	LoadMesh("teapot.obj", &teapot);
+	Material mat = { 0 };
+	LoadMaterial("default.mtl", &mat);
+	teapot.material = &mat;	
 
 	Mesh cube;
 	MakeCubeMesh(&cube);

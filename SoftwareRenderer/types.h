@@ -316,6 +316,14 @@ struct Color
 	float b;
 	float a;
 
+	Color() :
+		r(0.0f),
+		g(0.0f),
+		b(0.0f),
+		a(1.0f)
+	{
+	}
+
 	Color(float _r, float _g, float _b, float _a) :
 		r(clamp(_r, 0.0f, 1.0f)),
 		g(clamp(_g, 0.0f, 1.0f)),
