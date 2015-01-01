@@ -344,9 +344,9 @@ void LoadMaterial(char * filename, Material * material)
 		else if (*lineStart == 'K')
 		{
 			lineStart++;
-			if      (*lineStart == 'a') ReadColor(&material->ambientColor, lineStart);
-			else if (*lineStart == 'd') ReadColor(&material->diffuseColor, lineStart);
-			else if (*lineStart == 's') ReadColor(&material->specularColor, lineStart);
+			if      (*lineStart == 'a') ReadColor(&material->ambientColor, lineStart + 1);
+			else if (*lineStart == 'd') ReadColor(&material->diffuseColor, lineStart + 1);
+			else if (*lineStart == 's') ReadColor(&material->specularColor, lineStart + 1);
 		}
 		else if (!strncmp(lineStart, "map_K", 5))
 		{
@@ -580,7 +580,7 @@ SetPixel(win32_backbuffer * backbuffer, int x, int y, u32 color, float depth)
 }
 
 static void
-SetPixel(win32_backbuffer * backbuffer, Material * material, vec4 p, Color c0, Color c1, Color c2, vec3 uv0, vec3 uv1, vec3 uv2, float d0, float d1, float d2, float l0, float l1, float l2)
+SetPixel(win32_backbuffer * backbuffer, Material * material, vec4 p, vec3 uv0, vec3 uv1, vec3 uv2, float d0, float d1, float d2, float l0, float l1, float l2)
 {
 	int width = backbuffer->bmpInfo.bmiHeader.biWidth;
 	int height = backbuffer->bmpInfo.bmiHeader.biHeight;
@@ -595,16 +595,12 @@ SetPixel(win32_backbuffer * backbuffer, Material * material, vec4 p, Color c0, C
 	{
 		u32 * pixels = (u32 *)backbuffer->bmpMemory;
 
-		float r = c0.r + l1*(c1.r - c0.r) + l2*(c2.r - c0.r);
-		float g = c0.g + l1*(c1.g - c0.g) + l2*(c2.g - c0.g);
-		float b = c0.b + l1*(c1.b - c0.b) + l2*(c2.b - c0.b);
-		float a = c0.a + l1*(c1.a - c0.a) + l2*(c2.a - c0.a);
-		Color color(r, g, b, a);
-
 		float u = uv0.x + l1*(uv1.x - uv0.x) + l2*(uv2.x - uv0.x);
 		float v = uv0.y + l1*(uv1.y - uv0.y) + l2*(uv2.y - uv0.y);
 
-		color *= SampleTexture2D(material->diffuseTexture, u, v);
+		Color color = 
+			material->ambientColor * 0.001f + 
+			material->diffuseColor * SampleTexture2D(material->diffuseTexture, u, v);
 
 		pixels[idx] = color.rgba();
 		backbuffer->depthBuffer[idx] = depth;
@@ -625,7 +621,7 @@ static bool IsTopLeft(const vec4& a, const vec4& b)
 }
 
 static void
-Rasterize(win32_backbuffer * backbuffer, Material * material, vec4 v0, vec4 v1, vec4 v2, Color c0, Color c1, Color c2, vec3 uv0, vec3 uv1, vec3 uv2)
+Rasterize(win32_backbuffer * backbuffer, Material * material, vec4 v0, vec4 v1, vec4 v2, vec3 uv0, vec3 uv1, vec3 uv2)
 {
 	float screenHalfWidth = gScreenWidth / 2.0f;
 	float screenHalfHeight = gScreenHeight / 2.0f;
@@ -715,7 +711,7 @@ Rasterize(win32_backbuffer * backbuffer, Material * material, vec4 v0, vec4 v1, 
 
 				SetPixel(backbuffer, (int)(p.x + 0.5f), (int)(p.y + 0.5f), color.rgba(), depth);
 #else
-				SetPixel(backbuffer, material, p, c0, c1, c2, uv0, uv1, uv2, v0.w, v1.w, v2.w, l0, l1, l2);
+				SetPixel(backbuffer, material, p, uv0, uv1, uv2, v0.w, v1.w, v2.w, l0, l1, l2);
 #endif
 			}
 
@@ -924,7 +920,6 @@ RenderMesh(win32_backbuffer * backbuffer, Mesh * mesh, mat4x4 transform)
 		uint uvwC = mesh->indices[i + 5];
 		Rasterize(backbuffer, mesh->material,
 			xformedVerts[idxA], xformedVerts[idxB], xformedVerts[idxC], 
-			faceColors[0], faceColors[0], faceColors[0],
 			mesh->uvws[uvwA], mesh->uvws[uvwB], mesh->uvws[uvwC]);
 	}
 	free(xformedVerts);
