@@ -88,6 +88,23 @@ float magnitude(vec4 v)
 	return sqrtf(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
 }
 
+float dot(vec3 a, vec3 b)
+{
+	return a.x*b.x + a.y*b.y + a.z*b.z;
+}
+
+float magnitude(vec3 v)
+{
+	return sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
+}
+
+vec3 normalized(vec3 v)
+{
+	float mag = magnitude(v);
+	vec3 rv = { v.x / mag, v.y / mag, v.z / mag };
+	return rv;
+}
+
 quaternion RotationAroundAxis(float theta, vec4 axis)
 {
 	float halfTheta = theta / 2.0f;

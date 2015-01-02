@@ -579,9 +579,22 @@ SetPixel(win32_backbuffer * backbuffer, int x, int y, u32 color, float depth)
 	}
 }
 
-static void
-SetPixel(win32_backbuffer * backbuffer, Material * material, vec4 p, vec3 uv0, vec3 uv1, vec3 uv2, float d0, float d1, float d2, float l0, float l1, float l2)
+static vec3
+HalfVector(vec3 a, vec3 b)
 {
+	vec3 h = {
+		a.x + b.x,
+		a.y + b.y,
+		a.z + b.z
+	};
+	return normalized(h);
+}
+
+static void
+SetPixel(win32_backbuffer * backbuffer, Material * material, vec4 p, vec3 uv0, vec3 uv1, vec3 uv2, float d0, float d1, float d2, float l0, float l1, float l2, vec3 surfaceNormal)
+{
+	static const vec3 sunDir = { 10.0f, 5.0f, 10.0f };
+	static const vec3 viewNormal = { 0.0f, 0.0f, 1.0f };
 	int width = backbuffer->bmpInfo.bmiHeader.biWidth;
 	int height = backbuffer->bmpInfo.bmiHeader.biHeight;
 
@@ -598,9 +611,17 @@ SetPixel(win32_backbuffer * backbuffer, Material * material, vec4 p, vec3 uv0, v
 		float u = uv0.x + l1*(uv1.x - uv0.x) + l2*(uv2.x - uv0.x);
 		float v = uv0.y + l1*(uv1.y - uv0.y) + l2*(uv2.y - uv0.y);
 
+		vec3 sunNorm = normalized(sunDir);
+		vec3 h = HalfVector(sunNorm, viewNormal);
+		float surfaceNormDotSun = max(dot(surfaceNormal, sunNorm), 0.0f);
+		float surfaceNormDotH = max(dot(surfaceNormal, h), 0.0f);
+		float intensity = pow(surfaceNormDotH, material->specularIntensity);
+		Color diffuse = material->diffuseColor * SampleTexture2D(material->diffuseTexture, u, v) * surfaceNormDotSun;
+		Color specular = material->specularColor * intensity * (dot(sunNorm, surfaceNormal) > 0.0f ? 1.0f : 0.0f);
+
 		Color color = 
-			material->ambientColor * 0.001f + 
-			material->diffuseColor * SampleTexture2D(material->diffuseTexture, u, v);
+			material->ambientColor * 0.025f + 
+			diffuse + specular;
 
 		pixels[idx] = color.rgba();
 		backbuffer->depthBuffer[idx] = depth;
@@ -621,7 +642,7 @@ static bool IsTopLeft(const vec4& a, const vec4& b)
 }
 
 static void
-Rasterize(win32_backbuffer * backbuffer, Material * material, vec4 v0, vec4 v1, vec4 v2, vec3 uv0, vec3 uv1, vec3 uv2)
+Rasterize(win32_backbuffer * backbuffer, Material * material, vec4 v0, vec4 v1, vec4 v2, vec3 uv0, vec3 uv1, vec3 uv2, vec3 normal)
 {
 	float screenHalfWidth = gScreenWidth / 2.0f;
 	float screenHalfHeight = gScreenHeight / 2.0f;
@@ -711,7 +732,7 @@ Rasterize(win32_backbuffer * backbuffer, Material * material, vec4 v0, vec4 v1, 
 
 				SetPixel(backbuffer, (int)(p.x + 0.5f), (int)(p.y + 0.5f), color.rgba(), depth);
 #else
-				SetPixel(backbuffer, material, p, uv0, uv1, uv2, v0.w, v1.w, v2.w, l0, l1, l2);
+				SetPixel(backbuffer, material, p, uv0, uv1, uv2, v0.w, v1.w, v2.w, l0, l1, l2, normal);
 #endif
 			}
 
@@ -890,6 +911,20 @@ static void MakeCubeMesh(Mesh * mesh)
 	mesh->indices[35] = 7;
 }
 
+vec3 SurfaceNormal(const vec4& a, const vec4& b, const vec4& c)
+{
+	vec4 v1 = b - a;
+	vec4 v2 = c - a;
+
+	vec3 norm = {
+		v1.y*v2.z - v1.z*v2.y,
+		v1.z*v2.x - v1.x*v2.z,
+		v1.x*v2.y - v1.y*v2.x
+	};
+
+	return normalized(norm);
+}
+
 static void 
 RenderMesh(win32_backbuffer * backbuffer, Mesh * mesh, mat4x4 transform)
 {
@@ -918,9 +953,17 @@ RenderMesh(win32_backbuffer * backbuffer, Mesh * mesh, mat4x4 transform)
 		uint uvwB = mesh->indices[i + 3];
 		uint idxC = mesh->indices[i + 4];
 		uint uvwC = mesh->indices[i + 5];
+
+		vec4 v0 = xformedVerts[idxA];
+		vec4 v1 = xformedVerts[idxB];
+		vec4 v2 = xformedVerts[idxC];
+
+		vec3 normal = SurfaceNormal(v0, v1, v2);
+
 		Rasterize(backbuffer, mesh->material,
-			xformedVerts[idxA], xformedVerts[idxB], xformedVerts[idxC], 
-			mesh->uvws[uvwA], mesh->uvws[uvwB], mesh->uvws[uvwC]);
+			v0, v1, v2,
+			mesh->uvws[uvwA], mesh->uvws[uvwB], mesh->uvws[uvwC],
+			normal);
 	}
 	free(xformedVerts);
 }
@@ -1048,6 +1091,8 @@ WinMain(HINSTANCE hInstance,
 	LoadMesh("teapot.obj", &teapot);
 	Material mat = { 0 };
 	LoadMaterial("default.mtl", &mat);
+	mat.specularColor = Color(0.15f, 0.50f, 0.15f, 1.0f);
+	mat.specularIntensity = 50.0f;
 	teapot.material = &mat;	
 
 	Mesh cube;
