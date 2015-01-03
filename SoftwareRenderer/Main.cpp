@@ -155,7 +155,7 @@ Texture * LoadTexture(char * filename)
 	}
 	int x;
 	int y;
-	int comp; // Force RGBA
+	int comp; 
 	u8 * data = stbi_load_from_file(file, &x, &y, &comp, 4);
 
 	if (data == NULL) {
@@ -737,8 +737,6 @@ WinMain(HINSTANCE hInstance,
 	LoadMesh("teapot.obj", &teapot);
 	Material mat = { 0 };
 	LoadMaterial("default.mtl", &mat);
-	mat.specularColor = Color(0.15f, 0.50f, 0.15f, 1.0f);
-	mat.specularIntensity = 50.0f;
 	teapot.material = &mat;	
 
 	MSG msg;

@@ -342,10 +342,10 @@ struct Color
 	}
 
 	Color(float _r, float _g, float _b, float _a) :
-		r(clamp(_r, 0.0f, 1.0f)),
-		g(clamp(_g, 0.0f, 1.0f)),
-		b(clamp(_b, 0.0f, 1.0f)),
-		a(clamp(_a, 0.0f, 1.0f))
+		r(_r),
+		g(_g),
+		b(_b),
+		a(_a)
 	{
 	}
 
@@ -369,7 +369,6 @@ struct Color
 
 	Color& operator*=(float f)
 	{
-		f = clamp(f, 0.0f, 1.0f);
 		r*=f;
 		g*=f;
 		b*=f;
@@ -390,7 +389,6 @@ struct Color
 
 Color operator*(const Color& c1, float f)
 {
-	f = clamp(f, 0.0f, 1.0f);
 	return Color(c1.r*f, c1.g*f, c1.b*f, c1.a);
 }
 
@@ -401,10 +399,10 @@ Color operator*(const Color& c1, const Color& c2)
 
 Color operator+(const Color& c1, const Color& c2)
 {
-	float r = clamp((c1.r + c2.r), 0.0f, 1.0f);
-	float g = clamp((c1.g + c2.g), 0.0f, 1.0f);
-	float b = clamp((c1.b + c2.b), 0.0f, 1.0f);
-	float a = clamp((c1.a + c2.a), 0.0f, 1.0f);
+	float r = c1.r + c2.r;
+	float g = c1.r + c2.g;
+	float b = c1.b + c2.b;
+	float a = c1.a + c2.a;
 
 	return Color(r, g, b, a);
 }
