@@ -21,83 +21,9 @@
 // In a production setting this is a bad idea, but this is just proof-of-concept.
 #pragma warning(disable: 4996)
 
-
 static const int gScreenWidth = 1280;
 static const int gScreenHeight = 720;
 static bool gRunning;
-
-void DEBUGPrintMat4x4(const mat4x4& m)
-{
-	wchar_t buffer[256] = {0};
-
-	swprintf(buffer, _countof(buffer), L"[ %.4f, %.4f, %.4f, %.4f ]\n", m.a0, m.a1, m.a2, m.a3);
-	OutputDebugStringW(buffer);
-
-	swprintf(buffer, _countof(buffer), L"[ %.4f, %.4f, %.4f, %.4f ]\n", m.b0, m.b1, m.b2, m.b3);
-	OutputDebugStringW(buffer);
-
-	swprintf(buffer, _countof(buffer), L"[ %.4f, %.4f, %.4f, %.4f ]\n", m.c0, m.c1, m.c2, m.c3);
-	OutputDebugStringW(buffer);
-
-	swprintf(buffer, _countof(buffer), L"[ %.4f, %.4f, %.4f, %.4f ]\n", m.d0, m.d1, m.d2, m.d3);
-	OutputDebugStringW(buffer);
-}
-
-
-void DEBUGPrintVec4(const vec4& v)
-{
-	wchar_t buffer[256] = {0};
-	swprintf(buffer, _countof(buffer), L"< %.4f, %.4f, %.4f, %.4f >\n", v.x, v.y, v.z, v.w);
-	OutputDebugStringW(buffer);
-}
-
-void TestMatrixMultiply()
-{
-	float r = (gScreenWidth / 2.0f);
-	float l = -(gScreenWidth / 2.0f);
-	float t = (gScreenHeight / 2.0f);
-	float b = -(gScreenHeight / 2.0f);
-	float n = 1.0f;
-	float f = 100.0f;
-	mat4x4 test = FrustumMatrix(r, l, t, b, n, f);
-	mat4x4 ident = { 0.0f };
-
-	ident.a0 = 1.0f;
-	ident.b1 = 1.0f;
-	ident.c2 = 1.0f;
-	ident.d3 = 1.0f;
-
-	vec4 testVec( -100.0f, -100.0f, 100.0f, 1.0f );
-
-	OutputDebugStringW(L"Original:\n");
-
-	DEBUGPrintMat4x4(test);
-
-	OutputDebugStringW(L"\nAfter multiply by identity:\n");
-
-	DEBUGPrintMat4x4(test * ident);
-
-	OutputDebugStringW(L"\nTest vector:\n");
-
-	DEBUGPrintVec4(testVec);
-
-	OutputDebugStringW(L"\nTransformed vector:\n");
-
-	vec4 transformed = test * testVec;
-	DEBUGPrintVec4(transformed);
-
-	OutputDebugStringW(L"\n90degree rotation matrix around Y:\n");
-
-	mat4x4 rotMat = RotationMatrix((float)M_PI_2, RA_Y);
-	DEBUGPrintMat4x4(rotMat);
-	DEBUGPrintVec4(rotMat * testVec);
-
-	OutputDebugStringW(L"\n90 degree quaternion rotation around Y:\n");
-
-	vec4 yAxis = vec4( 0.0f, 1.0f, 0.0f, 0.0f );
-	quaternion quat = RotationAroundAxis((float)M_PI_2, yAxis);
-//	DEBUGPrintVec4(quat * testVec);
-}
 
 LRESULT CALLBACK
 Win32MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -207,35 +133,6 @@ static bool ReadLine(const char ** lineStart, const char ** lineEnd, const char 
     return true;
 }
 
-int ReadUint8(u8 * u, const char * c)
-{
-	const char * start = c;
-	const char * end;
-
-	while (*c && !isdigit(*c)) ++c;
-
-	*u = (u8)atoi(c);
-
-	while (*c && isdigit(*c)) ++c;
-	end = c;
-
-	return end - start;
-}
-
-int ReadFloat32(float * f, const char * c)
-{
-	const char * start = c;
-	const char * end;
-	while (*c && !isdigit(*c)) ++c;
-	
-	*f = (float)atof(c);
-
-	while (*c && (isdigit(*c) || *c == '.')) ++c;
-	end = c;
-
-	return end - start;
-}
-
 int ReadColor(Color * color, const char * c)
 {
 	color->a = 1.0f; // Colors are given as RGB, no alpha channel.
@@ -271,14 +168,11 @@ Texture * LoadTexture(char * filename)
 	texture->height = y;
 	u32 * texData = (u32 *)malloc(4 * x * y);
 
-	// Loaded image is RGBA, we need it in ARGB to match our convention.
-	#define RGBA_TO_ARGB(p) ((p & 0xff) << 24) | ((p & 0xffffff00) >> 8)
 	u32 * pixels = (u32 *)data;
 	for (int i = 0; i < x * y; ++i)
 	{
-		texData[i] = pixels[i];//RGBA_TO_ARGB(pixels[i]);
+		texData[i] = pixels[i];
 	}
-	#undef RGBA_TO_ARGB
 
 	texture->data = (char *)texData;
 
@@ -524,23 +418,6 @@ void LoadMesh(char * filename, Mesh * mesh)
 	memcpy(mesh->indices, &indices[0], indicesSize);
 }
 
-static void 
-RenderTestGradient(win32_backbuffer * backbuffer)
-{
-	int width = backbuffer->bmpInfo.bmiHeader.biWidth;
-	int height = backbuffer->bmpInfo.bmiHeader.biHeight;
-
-	u32 * pixels = (u32*)backbuffer->bmpMemory;
-
-	for (int x = 0; x < width; ++x)
-	{
-		for (int y = 0; y < height; ++y) 
-		{
-			pixels[y * width + x] = RGBA32(x, y, x-y, 0xff);
-		}
-	}
-}
-
 static Color
 SampleTexture2D(Texture * texture, float u, float v)
 {
@@ -559,25 +436,6 @@ SampleTexture2D(Texture * texture, float u, float v)
 // Based on the triangle rasterizer described by Fabian Giesen here:
 // https://fgiesen.wordpress.com/2013/02/08/triangle-rasterization-in-practice/
 //
-
-static void
-SetPixel(win32_backbuffer * backbuffer, int x, int y, u32 color, float depth)
-{
-	int width = backbuffer->bmpInfo.bmiHeader.biWidth;
-	int height = backbuffer->bmpInfo.bmiHeader.biHeight;
-
-	assert(x >= 0 && x < width);
-	assert(y >= 0 && y < height);
-
-	int idx = y * width + x;
-
-	if (depth > backbuffer->depthBuffer[idx])
-	{
-		u32 * pixels = (u32 *)backbuffer->bmpMemory;
-		pixels[idx] = color;
-		backbuffer->depthBuffer[idx] = depth;
-	}
-}
 
 static vec3
 HalfVector(vec3 a, vec3 b)
@@ -722,18 +580,7 @@ Rasterize(win32_backbuffer * backbuffer, Material * material, vec4 v0, vec4 v1, 
 			u32 mask = *(u32 *)&l0 | *(u32 *)&l1 | *(u32 *)&l2;
 			if (~mask & 0x80000000)
 			{
-#ifdef RASTERIZER_SLOW_PATH
-				float depth = v0.w + l1*(v1.w - v0.w) + l2*(v2.w - v0.w);
-				float r = c0.r + l1*(c1.r - c0.r) + l2*(c2.r - c0.r);
-				float g = c0.g + l1*(c1.g - c0.g) + l2*(c2.g - c0.g);
-				float b = c0.b + l1*(c1.b - c0.b) + l2*(c2.b - c0.b);
-				float a = c0.a + l1*(c1.a - c0.a) + l2*(c2.a - c0.a);
-				Color color(r, g, b, a);
-
-				SetPixel(backbuffer, (int)(p.x + 0.5f), (int)(p.y + 0.5f), color.rgba(), depth);
-#else
 				SetPixel(backbuffer, material, p, uv0, uv1, uv2, v0.w, v1.w, v2.w, l0, l1, l2, normal);
-#endif
 			}
 
 			l0 += la12;
@@ -745,170 +592,6 @@ Rasterize(win32_backbuffer * backbuffer, Material * material, vec4 v0, vec4 v1, 
 		lambda1_row += lb20;
 		lambda2_row += lb01;
 	}
-}
-
-static Color faceColors[6] = {
-	Color(1.0f, 1.0f, 1.0f, 1.0f),
-	Color(1.0f, 0.0f, 0.0f, 1.0f),
-	Color(0.0f, 1.0f, 0.0f, 1.0f),
-	Color(0.0f, 0.0f, 1.0f, 1.0f),
-	Color(1.0f, 1.0f, 0.0f, 1.0f),
-	Color(1.0f, 0.0f, 1.0f, 1.0f),
-};
-
-struct Triangle
-{
-	vec4 v0;
-	vec4 v1;
-	vec4 v2;
-};
-
-static void RenderMesh(win32_backbuffer * backbuffer, const vec4 * vertices, int vertexCount, const mat4x4& transform)
-{
-	static const int MAX_VERTICES = 1024;
-	assert(vertexCount < MAX_VERTICES);
-
-	float r = (gScreenWidth / 2.0f);
-	float l = -(gScreenWidth / 2.0f);
-	float t = -(gScreenHeight / 2.0f);
-	float b = (gScreenHeight / 2.0f);
-	float n = -1000.0f;
-	float f = 1000.0f;
-	static const mat4x4 frustumMatrix = FrustumMatrix(r, l, t, b, n, f);
-
-	Triangle tris[(MAX_VERTICES / 3) + 1];
-	for (int i = 0; i < vertexCount; i += 3)
-	{
-		int triIndex = i / 3;
-		tris[triIndex].v0 = frustumMatrix * transform * vertices[i];
-		tris[triIndex].v1 = frustumMatrix * transform * vertices[i + 1];
-		tris[triIndex].v2 = frustumMatrix * transform * vertices[i + 2];
-	}
-
-	std::sort(&tris[0], &tris[vertexCount / 3], [](const Triangle& a, const Triangle& b) {
-		return min3(a.v0.w, a.v1.w, a.v2.w) < min3(b.v0.w, b.v1.w, b.v2.w);
-	});
-
-	for (int i = 0; i < vertexCount / 3; ++i)
-	{ 
-//		Rasterize(backbuffer, tris[i].v0, tris[i].v1, tris[i].v2, 
-//			faceColors[i % 6], faceColors[i % 6], faceColors[i % 6]);
-	}
-}
-
-static const int meshVertexCount = 36;
-static const vec4 meshVerts[meshVertexCount] = {
-	vec4( -1.0f, -1.0f, -1.0f, 1.0f ),
-	vec4( -1.0f, -1.0f,  1.0f, 1.0f ),
-	vec4( -1.0f,  1.0f,  1.0f, 1.0f ),
-//
-	vec4(  1.0f,  1.0f, -1.0f, 1.0f ),
-	vec4( -1.0f, -1.0f, -1.0f, 1.0f ),
-	vec4( -1.0f,  1.0f, -1.0f, 1.0f ),
-//
-	vec4(  1.0f, -1.0f,  1.0f, 1.0f ),
-	vec4( -1.0f, -1.0f, -1.0f, 1.0f ),
-	vec4(  1.0f, -1.0f, -1.0f, 1.0f ),
-//
-	vec4(  1.0f,  1.0f, -1.0f, 1.0f ),
-	vec4(  1.0f, -1.0f, -1.0f, 1.0f ),
-	vec4( -1.0f, -1.0f, -1.0f, 1.0f ),
-//
-	vec4( -1.0f, -1.0f, -1.0f, 1.0f ),
-	vec4( -1.0f,  1.0f,  1.0f, 1.0f ),
-	vec4( -1.0f,  1.0f, -1.0f, 1.0f ),
-//
-	vec4(  1.0f, -1.0f,  1.0f, 1.0f ),
-	vec4( -1.0f, -1.0f,  1.0f, 1.0f ),
-	vec4( -1.0f, -1.0f, -1.0f, 1.0f ),
-//
-	vec4( -1.0f,  1.0f,  1.0f, 1.0f ),
-	vec4( -1.0f, -1.0f,  1.0f, 1.0f ),
-	vec4(  1.0f, -1.0f,  1.0f, 1.0f ),
-//
-	vec4(  1.0f,  1.0f,  1.0f, 1.0f ),
-	vec4(  1.0f, -1.0f, -1.0f, 1.0f ),
-	vec4(  1.0f,  1.0f, -1.0f, 1.0f ),
-//		
-	vec4(  1.0f, -1.0f, -1.0f, 1.0f ),
-	vec4(  1.0f,  1.0f,  1.0f, 1.0f ),
-	vec4(  1.0f, -1.0f,  1.0f, 1.0f ),
-//		
-	vec4(  1.0f,  1.0f,  1.0f, 1.0f ),
-	vec4(  1.0f,  1.0f, -1.0f, 1.0f ),
-	vec4( -1.0f,  1.0f, -1.0f, 1.0f ),
-//
-	vec4(  1.0f,  1.0f,  1.0f, 1.0f ),
-	vec4( -1.0f,  1.0f, -1.0f, 1.0f ),
-	vec4( -1.0f,  1.0f,  1.0f, 1.0f ),
-//
-	vec4(  1.0f,  1.0f,  1.0f, 1.0f ),
-	vec4( -1.0f,  1.0f,  1.0f, 1.0f ),
-	vec4(  1.0f, -1.0f,  1.0f, 1.0f ),
-};
-
-static void MakeCubeMesh(Mesh * mesh)
-{
-	mesh->vertexCount = 8;
-	mesh->vertices = (vec4 *)calloc(sizeof(vec4), mesh->vertexCount);
-	mesh->vertices[0] = vec4( 1.0f,  1.0f,  1.0f, 1.0f);
-	mesh->vertices[1] = vec4(-1.0f,  1.0f,  1.0f, 1.0f);
-	mesh->vertices[2] = vec4(-1.0f, -1.0f,  1.0f, 1.0f);
-	mesh->vertices[3] = vec4(-1.0f, -1.0f, -1.0f, 1.0f);
-	mesh->vertices[4] = vec4( 1.0f, -1.0f, -1.0f, 1.0f);
-	mesh->vertices[5] = vec4( 1.0f,  1.0f, -1.0f, 1.0f);
-	mesh->vertices[6] = vec4(-1.0f,  1.0f, -1.0f, 1.0f);
-	mesh->vertices[7] = vec4( 1.0f, -1.0f,  1.0f, 1.0f);
-
-	mesh->indexCount = 6*2*3;  // Six sides, two triangles per side, 3 vertices each.
-	mesh->indices = (uint *)calloc(sizeof(uint), mesh->indexCount);
-	mesh->indices[0] = 3;
-	mesh->indices[1] = 2;
-	mesh->indices[2] = 1;
-
-	mesh->indices[3] = 5;
-	mesh->indices[4] = 3;
-	mesh->indices[5] = 6;
-
-	mesh->indices[6] = 7;
-	mesh->indices[7] = 3;
-	mesh->indices[8] = 4;
-
-	mesh->indices[9]  = 5;
-	mesh->indices[10] = 4;
-	mesh->indices[11] = 3;
-
-	mesh->indices[12] = 3;
-	mesh->indices[13] = 1;
-	mesh->indices[14] = 6;
-
-	mesh->indices[15] = 7;
-	mesh->indices[16] = 2;
-	mesh->indices[17] = 3;
-
-	mesh->indices[18] = 1;
-	mesh->indices[19] = 2;
-	mesh->indices[20] = 7;
-
-	mesh->indices[21] = 0;
-	mesh->indices[22] = 4;
-	mesh->indices[23] = 5;
-
-	mesh->indices[24] = 4;
-	mesh->indices[25] = 0;
-	mesh->indices[26] = 7;
-
-	mesh->indices[27] = 0;
-	mesh->indices[28] = 5;
-	mesh->indices[29] = 6;
-
-	mesh->indices[30] = 0;
-	mesh->indices[31] = 6;
-	mesh->indices[32] = 1;
-
-	mesh->indices[33] = 0;
-	mesh->indices[34] = 1;
-	mesh->indices[35] = 7;
 }
 
 vec3 SurfaceNormal(const vec4& a, const vec4& b, const vec4& c)
@@ -989,41 +672,6 @@ RenderTestMesh(win32_backbuffer * backbuffer, Mesh * mesh)
 	RenderMesh(backbuffer, mesh, transform);
 }
 
-static void RenderTest(win32_backbuffer * backbuffer)
-{
-	static const vec3 scale = { 1.0f, 1.0f, 1.0f };
-	static const vec3 position = { 0.0f, 0.0f, 0.0f };
-
-	static float angle = 0.0f;
-	vec4 axis = vec4( 1.0f, 0.5f, 0.0f, 0.0f );
-	quaternion rotation = RotationAroundAxis(angle, axis);
-	mat4x4 transform = MakeTransformMatrix(rotation, scale, position);
-	angle += 0.1f;
-
-	static const vec3 scale2 = { 0.5f, 1.5f, 0.5f };
-	static const vec3 position2 = { 1.0f, 1.0f, 5.0f };
-	static const quaternion rot2 = RotationAroundAxis((float)M_PI_4, axis);
-	static const mat4x4 transform2 = MakeTransformMatrix(rot2, scale2, position2);
-
-	static float cameraAngle = 0.0f;
-	vec4 upAxis = vec4( 0.0f, -1.0f, 0.0f, 0.0f );
-	quaternion cameraRotation = RotationAroundAxis(cameraAngle, upAxis);
-	vec3 cameraPosition = { 0.0f, 0.0f, 15.0f };
-	mat4x4 cameraTransform = MakeTransformMatrix(cameraRotation, scale, cameraPosition);
-	cameraAngle -= 0.05f;
-
-	RenderMesh(backbuffer, &meshVerts[0], meshVertexCount, cameraTransform * transform);
-	RenderMesh(backbuffer, &meshVerts[0], meshVertexCount, cameraTransform * transform2);
-
-	for (int i = 0; i < 4; ++i)
-	{
-		quaternion q = {0, 0, 0, 1}; //RotationAroundAxis((float)M_PI_4 * i, upAxis);
-		vec3 p = { -1.75, -1.75, 2.5f * (i + 1) };
-		mat4x4 t = MakeTransformMatrix(q, scale, p);
-		RenderMesh(backbuffer, &meshVerts[0], meshVertexCount, cameraTransform * t);
-	}
-}
-
 static u64
 Win32TimerFrequency()
 {
@@ -1081,8 +729,6 @@ WinMain(HINSTANCE hInstance,
 
 	gRunning = true;
 
-	TestMatrixMultiply();
-
 	u64 frameTargetMS = 1000 / 30;
 	u64 perfTicksPerMS = Win32TimerFrequency() / 1000;
 	u64 lastTick = Win32GetPerformanceTimer();
@@ -1094,9 +740,6 @@ WinMain(HINSTANCE hInstance,
 	mat.specularColor = Color(0.15f, 0.50f, 0.15f, 1.0f);
 	mat.specularIntensity = 50.0f;
 	teapot.material = &mat;	
-
-	Mesh cube;
-	MakeCubeMesh(&cube);
 
 	MSG msg;
 	while (gRunning)
@@ -1114,7 +757,6 @@ WinMain(HINSTANCE hInstance,
 		int width = clientRect.right - clientRect.left;
 		int height = clientRect.bottom - clientRect.top;
 		
-//		RenderTest(&backbuffer);
 		RenderTestMesh(&backbuffer, &teapot);
 
 		Win32RedrawWindow(window, x, y, width, height, &backbuffer);
