@@ -448,11 +448,39 @@ HalfVector(vec3 a, vec3 b)
 	return normalized(h);
 }
 
-static void
-SetPixel(win32_backbuffer * backbuffer, Material * material, vec4 p, vec3 uv0, vec3 uv1, vec3 uv2, float d0, float d1, float d2, float l0, float l1, float l2, vec3 surfaceNormal)
+struct VertexAttributes {
+	vec3 uvw;
+	float depth;
+};
+
+// MSVC will gladly generate conditional moves (or branches) rather than use
+// SSE2 min/max for floats.
+//
+// So, we use intrinsics to force it.
+#include <mmintrin.h>
+inline float
+minf(const float& a, const float& b)
 {
-	static const vec3 sunDir = { 10.0f, 5.0f, 10.0f };
-	static const vec3 viewNormal = { 0.0f, 0.0f, 1.0f };
+	float rv;
+	_mm_store_ss(&rv, _mm_min_ss(_mm_set_ss(a), _mm_set_ss(b)));
+	return rv;
+}
+
+inline float
+maxf(const float& a, const float& b)
+{
+	float rv;
+	_mm_store_ss(&rv, _mm_max_ss(_mm_set_ss(a), _mm_set_ss(b)));
+	return rv;
+}
+
+static void
+SetPixel(win32_backbuffer * backbuffer, Material * material, vec4 p, 
+		 VertexAttributes va0, VertexAttributes va1, VertexAttributes va2, 
+		 float l0, float l1, float l2, 
+		 vec3 surfaceNormal, vec3 viewNormal)
+{
+	static const vec3 sunDir = { 0, -1, 1 };
 	int width = backbuffer->bmpInfo.bmiHeader.biWidth;
 	int height = backbuffer->bmpInfo.bmiHeader.biHeight;
 
@@ -461,26 +489,28 @@ SetPixel(win32_backbuffer * backbuffer, Material * material, vec4 p, vec3 uv0, v
 
 	int idx = y * width + x;
 
-	float depth = d0 + l1*(d1-d0) + l2*(d2-d0);
+	float depth = va0.depth + l1*(va1.depth-va0.depth) + l2*(va2.depth-va0.depth);
 	if (depth > backbuffer->depthBuffer[idx])
 	{
 		u32 * pixels = (u32 *)backbuffer->bmpMemory;
 
-		float u = uv0.x + l1*(uv1.x - uv0.x) + l2*(uv2.x - uv0.x);
-		float v = uv0.y + l1*(uv1.y - uv0.y) + l2*(uv2.y - uv0.y);
-
+		float u = va0.uvw.x + l1*(va1.uvw.x - va0.uvw.x) + l2*(va2.uvw.x - va0.uvw.x);
+		float v = va0.uvw.y + l1*(va1.uvw.y - va0.uvw.y) + l2*(va2.uvw.y - va0.uvw.y);
+#if 1
 		vec3 sunNorm = normalized(sunDir);
-		vec3 h = HalfVector(sunNorm, viewNormal);
-		float surfaceNormDotSun = max(dot(surfaceNormal, sunNorm), 0.0f);
-		float surfaceNormDotH = max(dot(surfaceNormal, h), 0.0f);
-		float intensity = pow(surfaceNormDotH, material->specularIntensity);
+		float surfaceNormDotSun = maxf(dot(surfaceNormal, sunNorm), 0.0f);
 		Color diffuse = material->diffuseColor * SampleTexture2D(material->diffuseTexture, u, v) * surfaceNormDotSun;
-		Color specular = material->specularColor * intensity * (dot(sunNorm, surfaceNormal) > 0.0f ? 1.0f : 0.0f);
 
+		vec3 h = HalfVector(sunNorm, viewNormal);
+		float surfaceNormDotH = maxf(dot(surfaceNormal, h), 0.0f);
+		float intensity = pow(surfaceNormDotH, material->specularIntensity);
+		Color specular = material->specularColor * intensity * (dot(sunNorm, surfaceNormal) > 0.0f);
 		Color color = 
 			material->ambientColor * 0.025f + 
 			diffuse + specular;
-
+#else
+		Color color = material->diffuseColor * SampleTexture2D(material->diffuseTexture, u, v);
+#endif
 		pixels[idx] = color.rgba();
 		backbuffer->depthBuffer[idx] = depth;
 	}
@@ -528,7 +558,7 @@ Rasterize(win32_backbuffer * backbuffer, Material * material, vec4 v0, vec4 v1, 
 	maxX = ceilf(min(maxX, gScreenWidth - 1.0f));
 	maxY = ceilf(min(maxY, gScreenHeight - 1.0f));
 
-	float stepSize = 0.5f; // Pixels to step in each direction.
+	float stepSize = 1.0f; // Pixels to step in each direction.
 
 	// Per-step deltas for barycentric weights.
 	float a01 = (v0.y - v1.y) * stepSize;
@@ -567,20 +597,25 @@ Rasterize(win32_backbuffer * backbuffer, Material * material, vec4 v0, vec4 v1, 
 	float lb20 = b20 / twice_area;
 	float lb01 = b01 / twice_area;
 
-	for (p.y = minY; p.y <= maxY; p.y += stepSize)
+	VertexAttributes va0 = { uv0, v0.w };
+	VertexAttributes va1 = { uv1, v1.w };
+	VertexAttributes va2 = { uv2, v2.w };
+
+	for (p.y = minY; p.y < maxY; p.y += stepSize)
 	{
 		float l0 = lambda0_row;
 		float l1 = lambda1_row;
 		float l2 = lambda2_row;
 
-		for (p.x = minX; p.x <= maxX; p.x += stepSize)
+		for (p.x = minX; p.x < maxX; p.x += stepSize)
 		{
 			// Test whether any of the barycentric weights are negative.
 			// Using a bitmask here is a definite win on larger meshes.
 			u32 mask = *(u32 *)&l0 | *(u32 *)&l1 | *(u32 *)&l2;
 			if (~mask & 0x80000000)
 			{
-				SetPixel(backbuffer, material, p, uv0, uv1, uv2, v0.w, v1.w, v2.w, l0, l1, l2, normal);
+				vec3 viewNormal = { p.x, p.y, -1.0f };
+				SetPixel(backbuffer, material, p, va0, va1, va2, l0, l1, l2, normal, normalized(viewNormal));
 			}
 
 			l0 += la12;
