@@ -474,6 +474,25 @@ maxf(const float& a, const float& b)
 	return rv;
 }
 
+inline float
+sse_floorf(const float& a)
+{
+	float rv;
+	_mm_store_ss(&rv, _mm_floor_ps(_mm_set_ss(a)));
+	return rv;
+}
+
+inline float
+sse_ceilf(const float& a)
+{
+	float rv;
+	_mm_store_ss(&rv, _mm_ceil_ps(_mm_set_ss(a)));
+	return rv;
+}
+
+#define floorf(a) sse_floorf(a)
+#define ceilf(a) sse_ceilf(a)
+
 static void
 SetPixel(win32_backbuffer * backbuffer, Material * material, vec4 p, 
 		 VertexAttributes va0, VertexAttributes va1, VertexAttributes va2, 
@@ -496,7 +515,7 @@ SetPixel(win32_backbuffer * backbuffer, Material * material, vec4 p,
 
 		float u = va0.uvw.x + l1*(va1.uvw.x - va0.uvw.x) + l2*(va2.uvw.x - va0.uvw.x);
 		float v = va0.uvw.y + l1*(va1.uvw.y - va0.uvw.y) + l2*(va2.uvw.y - va0.uvw.y);
-#if 1
+#if 0
 		vec3 sunNorm = normalized(sunDir);
 		float surfaceNormDotSun = maxf(dot(surfaceNormal, sunNorm), 0.0f);
 		Color diffuse = material->diffuseColor * SampleTexture2D(material->diffuseTexture, u, v) * surfaceNormDotSun;
@@ -515,6 +534,9 @@ SetPixel(win32_backbuffer * backbuffer, Material * material, vec4 p,
 		backbuffer->depthBuffer[idx] = depth;
 	}
 }
+
+#define min3f(a, b, c) minf(a, minf(b, c))
+#define max3f(a, b, c) maxf(a, maxf(b, c))
 
 // Compute (twice) the area of the triangle abc.
 static float
@@ -547,16 +569,16 @@ Rasterize(win32_backbuffer * backbuffer, Material * material, vec4 v0, vec4 v1, 
 	if (v0.w > 0.0f || v1.w > 0.0f || v2.w > 0.0f) return;
 
 	// Calculate triangle bounding box
-	float minX = min3(v0.x, v1.x, v2.x);
-	float minY = min3(v0.y, v1.y, v2.y);
-	float maxX = max3(v0.x, v1.x, v2.x);
-	float maxY = max3(v0.y, v1.y, v2.y);
+	float minX = min3f(v0.x, v1.x, v2.x);
+	float minY = min3f(v0.y, v1.y, v2.y);
+	float maxX = max3f(v0.x, v1.x, v2.x);
+	float maxY = max3f(v0.y, v1.y, v2.y);
 
 	// Clip bounding box to screen.
-	minX = floorf(max(minX, 0));
-	minY = floorf(max(minY, 0));
-	maxX = ceilf(min(maxX, gScreenWidth - 1.0f));
-	maxY = ceilf(min(maxY, gScreenHeight - 1.0f));
+	minX = floorf(maxf(minX, 0));
+	minY = floorf(maxf(minY, 0));
+	maxX = ceilf(minf(maxX, gScreenWidth - 1.0f));
+	maxY = ceilf(minf(maxY, gScreenHeight - 1.0f));
 
 	float stepSize = 1.0f; // Pixels to step in each direction.
 
