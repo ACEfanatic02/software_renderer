@@ -323,9 +323,7 @@ void LoadMesh(char * filename, Mesh * mesh)
 			w = (float)strtod(cur, &cur);
 
 			assert(cur <= lineEnd);
-
-			vec3 uvw = { u, v, w }; 
-			uvws.push_back(uvw);
+			uvws.push_back(vec3(u, v, w));
 		}
 		else if (*lineStart == 'f')
 		{
@@ -440,11 +438,11 @@ SampleTexture2D(Texture * texture, float u, float v)
 static vec3
 HalfVector(vec3 a, vec3 b)
 {
-	vec3 h = {
+	vec3 h(
 		a.x + b.x,
 		a.y + b.y,
 		a.z + b.z
-	};
+	);
 	return normalized(h);
 }
 
@@ -499,7 +497,7 @@ SetPixel(win32_backbuffer * backbuffer, Material * material, vec4 p,
 		 float l0, float l1, float l2, 
 		 vec3 surfaceNormal, vec3 viewNormal)
 {
-	static const vec3 sunDir = { 0, -1, 1 };
+	static const vec3 sunDir(0.0f, -1.0f, 1.0f);
 	int width = backbuffer->bmpInfo.bmiHeader.biWidth;
 	int height = backbuffer->bmpInfo.bmiHeader.biHeight;
 
@@ -636,7 +634,7 @@ Rasterize(win32_backbuffer * backbuffer, Material * material, vec4 v0, vec4 v1, 
 			u32 mask = *(u32 *)&l0 | *(u32 *)&l1 | *(u32 *)&l2;
 			if (~mask & 0x80000000)
 			{
-				vec3 viewNormal = { p.x, p.y, -1.0f };
+				vec3 viewNormal(p.x, p.y, -1.0f);
 				SetPixel(backbuffer, material, p, va0, va1, va2, l0, l1, l2, normal, normalized(viewNormal));
 			}
 
@@ -656,11 +654,11 @@ vec3 SurfaceNormal(const vec4& a, const vec4& b, const vec4& c)
 	vec4 v1 = b - a;
 	vec4 v2 = c - a;
 
-	vec3 norm = {
+	vec3 norm(
 		v1.y*v2.z - v1.z*v2.y,
 		v1.z*v2.x - v1.x*v2.z,
 		v1.x*v2.y - v1.y*v2.x
-	};
+	);
 
 	return normalized(norm);
 }
@@ -709,10 +707,10 @@ RenderMesh(win32_backbuffer * backbuffer, Mesh * mesh, mat4x4 transform)
 }
 
 static void 
-RenderTestMesh(win32_backbuffer * backbuffer, Mesh * mesh)
+RenderTestMesh(win32_backbuffer * backbuffer, Mesh * mesh, vec3 cameraPosition, quaternion cameraRotation)
 {
-	static const vec3 scale = { 1.0f, 1.0f, 1.0f };
-	static const vec3 position = { 0.0f, -15.0f, 0.0f };
+	static const vec3 scale(1.0f, 1.0f, 1.0f);
+	static const vec3 position(0.0f, -15.0f, 0.0f);
 	static const vec4 axis(0.0f, 1.0f, 0.0f, 0.0f);
 	static const vec4 xAxis(-1.0f, 0.0f, 0.0f, 0.0f);
 
@@ -721,8 +719,8 @@ RenderTestMesh(win32_backbuffer * backbuffer, Mesh * mesh)
 	angle += 0.01f;
 	mat4x4 transform = MakeTransformMatrix(rotation, scale, position);
 
-	static const vec3 cameraPosition = { 0.0f, 0.0f, 250.0f }; 
-	quaternion cameraRotation = RotationAroundAxis((float)M_PI * -1.25f, xAxis);
+//	static const vec3 cameraPosition(0.0f, 0.0f, 250.0f); 
+//	quaternion cameraRotation = RotationAroundAxis((float)M_PI * -1.25f, xAxis);
 
 	transform = MakeTransformMatrix(cameraRotation, scale, cameraPosition) * transform;
 
@@ -794,13 +792,43 @@ WinMain(HINSTANCE hInstance,
 	LoadMesh("teapot.obj", &teapot);
 	Material mat = { 0 };
 	LoadMaterial("default.mtl", &mat);
-	teapot.material = &mat;	
+	teapot.material = &mat;
+
+	vec3 cameraPosition(0.0f, 0.0f, 250.0f); 
+	quaternion cameraRotation = { 0.0f, 0.0f, 0.0f, 1.0f };
 
 	MSG msg;
 	while (gRunning)
 	{
 		while (PeekMessage(&msg, window, 0, 0, 1))
 		{
+			switch(msg.message)
+			{
+			case WM_KEYDOWN:
+				switch (msg.wParam)
+				{
+				case 'A':
+					cameraPosition.x += 1.0f;
+					break;
+				case 'D':
+					cameraPosition.x -= 1.0f;
+					break;
+				case 'W':
+					cameraPosition.z -= 1.0f;
+					break;
+				case 'S':
+					cameraPosition.z += 1.0f;
+					break;
+
+				case 'Q':
+					cameraRotation = RotationAroundAxis((float)0.25, vec4(0.0f, 1.0f, 0.0f, 0.0f)) * cameraRotation;
+					break;
+				case 'E':
+					cameraRotation = RotationAroundAxis((float)-0.25, vec4(0.0f, 1.0f, 0.0f, 0.0f)) * cameraRotation;
+					break;
+				}
+				break;
+			}
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}
@@ -812,7 +840,7 @@ WinMain(HINSTANCE hInstance,
 		int width = clientRect.right - clientRect.left;
 		int height = clientRect.bottom - clientRect.top;
 		
-		RenderTestMesh(&backbuffer, &teapot);
+		RenderTestMesh(&backbuffer, &teapot, cameraPosition, cameraRotation);
 
 		Win32RedrawWindow(window, x, y, width, height, &backbuffer);
 		Win32ClearBackbuffer(&backbuffer, RGBA32(0, 0, 0, 0));

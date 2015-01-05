@@ -20,6 +20,18 @@ struct vec3
 	float x;
 	float y;
 	float z;
+
+	vec3() :
+		x(0),
+		y(0),
+		z(0)
+	{}
+
+	vec3(float _x, float _y, float _z) :
+		x(_x),
+		y(_y),
+		z(_z)
+	{}
 };
 
 struct vec4
@@ -101,8 +113,7 @@ float magnitude(vec3 v)
 vec3 normalized(vec3 v)
 {
 	float mag = magnitude(v);
-	vec3 rv = { v.x / mag, v.y / mag, v.z / mag };
-	return rv;
+	return vec3(v.x / mag, v.y / mag, v.z / mag);
 }
 
 quaternion RotationAroundAxis(float theta, vec4 axis)
