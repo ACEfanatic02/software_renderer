@@ -670,6 +670,7 @@ RenderMesh(win32_backbuffer * backbuffer, Mesh * mesh, mat4x4 transform)
 	float l = -(gScreenWidth / 2.0f);
 	float t = -(gScreenHeight / 2.0f);
 	float b = (gScreenHeight / 2.0f);
+
 	float n = -1000.0f;
 	float f = 1000.0f;
 	static const mat4x4 frustumMatrix = FrustumMatrix(r, l, t, b, n, f);
